@@ -123,12 +123,38 @@ export class SessionManager extends EventEmitter<SessionManagerEvents> {
         env: process.env as Record<string, string>,
       });
 
-      // For Claude CLI: Send the command via stdin after a short delay to let it initialize
+      // For Claude CLI: Wait for the prompt before sending the command
       // This keeps Claude in interactive mode rather than print mode
       if (commandToRun && isClaudeCli) {
+        let commandSent = false;
+        let outputBuffer = '';
+
+        // Watch for the prompt character to know Claude is ready
+        const checkForPrompt = (data: string) => {
+          if (commandSent) return;
+          outputBuffer += data;
+
+          // Claude Code shows ❯ when ready for input
+          // Also check for the prompt after MCP connection messages
+          if (outputBuffer.includes('❯') || outputBuffer.includes('>')) {
+            commandSent = true;
+            // Small delay after prompt appears to ensure it's fully ready
+            setTimeout(() => {
+              ptyProcess.write(commandToRun + '\n');
+            }, 100);
+          }
+        };
+
+        // Attach temporary listener for prompt detection
+        ptyProcess.onData(checkForPrompt);
+
+        // Fallback: If no prompt detected in 10 seconds, send anyway
         setTimeout(() => {
-          ptyProcess.write(commandToRun + '\n');
-        }, 1000); // Wait 1 second for Claude to be ready
+          if (!commandSent) {
+            commandSent = true;
+            ptyProcess.write(commandToRun + '\n');
+          }
+        }, 10000);
       }
 
       // Create session object
