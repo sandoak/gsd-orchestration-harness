@@ -18,6 +18,7 @@
     { "path": "./packages/core" },
     { "path": "./packages/session-manager" },
     { "path": "./packages/mcp-server" },
-    { "path": "./packages/web-server" }
+    { "path": "./packages/web-server" },
+    { "path": "./packages/harness" }
   ]
 }

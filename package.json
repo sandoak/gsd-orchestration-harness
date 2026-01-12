@@ -16,7 +16,10 @@
     "format:check": "prettier --check .",
     "type-check": "pnpm -r type-check",
     "clean": "pnpm -r exec rm -rf dist",
-    "prepare": "husky"
+    "prepare": "husky",
+    "harness:start": "pnpm -r build && node packages/harness/dist/index.js",
+    "harness:dev": "pnpm -r build && tsx packages/harness/src/index.ts",
+    "dashboard:dev": "pnpm --filter @gsd/dashboard dev"
   },
   "keywords": [],
   "author": "",
