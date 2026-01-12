@@ -1,0 +1,105 @@
+#!/usr/bin/env node
+/**
+ * GSD Orchestration Harness - Unified Entry Point
+ *
+ * This is the main entry point that starts both the MCP server and web dashboard
+ * with a shared PersistentSessionManager instance.
+ *
+ * The harness enables:
+ * - Claude Code to call MCP tools via stdio
+ * - Humans to monitor sessions via the web dashboard (http://localhost:3333)
+ * - Real-time session event streaming via WebSocket (/ws)
+ */
+
+import { GsdMcpServer } from '@gsd/mcp-server';
+import { PersistentSessionManager } from '@gsd/session-manager';
+import { HarnessServer } from '@gsd/web-server';
+
+/**
+ * Default port for the web dashboard.
+ */
+const DEFAULT_PORT = 3333;
+
+/**
+ * Logs a message to stderr to avoid interfering with MCP stdout communication.
+ */
+function log(message: string): void {
+  // eslint-disable-next-line no-console -- CLI output must go to stderr
+  console.error(`[gsd-harness] ${message}`);
+}
+
+/**
+ * Main entry point - creates shared manager and starts both servers.
+ */
+async function main(): Promise<void> {
+  log('Starting GSD Orchestration Harness...');
+
+  // Create single shared session manager instance
+  const manager = new PersistentSessionManager();
+  log('Session manager initialized');
+
+  // Create web dashboard server (HTTP + WebSocket)
+  const port = parseInt(process.env.GSD_HARNESS_PORT ?? String(DEFAULT_PORT), 10);
+  const webServer = new HarnessServer({
+    manager,
+    port,
+  });
+
+  // Create MCP server (stdio transport)
+  const mcpServer = new GsdMcpServer(manager);
+
+  // Track shutdown state
+  let isShuttingDown = false;
+
+  /**
+   * Handles graceful shutdown of both servers.
+   */
+  const shutdown = async (): Promise<void> => {
+    if (isShuttingDown) {
+      return;
+    }
+    isShuttingDown = true;
+
+    log('Shutting down...');
+
+    try {
+      // Stop web server first (stops accepting new connections)
+      await webServer.stop();
+      log('Web server stopped');
+
+      // Close MCP server (also closes the session manager)
+      await mcpServer.close();
+      log('MCP server stopped');
+
+      log('Shutdown complete');
+      process.exit(0);
+    } catch (error) {
+      log(`Error during shutdown: ${error instanceof Error ? error.message : String(error)}`);
+      process.exit(1);
+    }
+  };
+
+  // Register signal handlers for graceful shutdown
+  process.on('SIGINT', () => void shutdown());
+  process.on('SIGTERM', () => void shutdown());
+
+  try {
+    // Start web server first
+    await webServer.start();
+    log(`Web dashboard running at http://localhost:${port}`);
+    log(`WebSocket endpoint at ws://localhost:${port}/ws`);
+
+    // Start MCP server (this blocks waiting for MCP messages on stdin)
+    log('MCP server ready on stdio');
+    await mcpServer.start();
+  } catch (error) {
+    log(`Failed to start harness: ${error instanceof Error ? error.message : String(error)}`);
+    await shutdown();
+  }
+}
+
+// Run main function
+main().catch((error: unknown) => {
+  log(`Fatal error: ${error instanceof Error ? error.message : String(error)}`);
+  process.exit(1);
+});

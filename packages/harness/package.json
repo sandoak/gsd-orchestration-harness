@@ -1,0 +1,35 @@
+{
+  "name": "@gsd/harness",
+  "version": "0.1.0",
+  "description": "GSD Orchestration Harness - Unified entry point for MCP server and web dashboard",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "bin": {
+    "gsd-harness": "./dist/index.js"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsx --watch src/index.ts",
+    "start": "node dist/index.js",
+    "type-check": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@gsd/mcp-server": "workspace:*",
+    "@gsd/session-manager": "workspace:*",
+    "@gsd/web-server": "workspace:*"
+  },
+  "devDependencies": {
+    "tsx": "^4.7.0",
+    "typescript": "^5.3.0"
+  },
+  "files": [
+    "dist"
+  ]
+}
