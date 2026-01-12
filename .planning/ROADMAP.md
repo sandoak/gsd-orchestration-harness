@@ -24,7 +24,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 2: Session Management** - Claude CLI process spawning with output capture and persistence (3/3 plans)
 - [x] **Phase 3: MCP Server** - 6 tools for session control via stdio transport (3/3 plans)
 - [x] **Phase 4: Web Dashboard** - Real-time terminal dashboard with xterm.js (3/3 plans)
-- [ ] **Phase 5: GSD Integration** - State parsing and checkpoint automation
+- [x] **Phase 5: GSD Integration** - State parsing and checkpoint automation (3/3 plans)
 - [ ] **Phase 6: E2E Integration** - Wire components, testing, and polish
 
 ## Phase Details
@@ -92,7 +92,7 @@ Plans:
 
 - [x] 05-01: GSD state parser (STATE.md, ROADMAP.md, PLAN.md) (2026-01-12)
 - [x] 05-02: Checkpoint detection and classification (2026-01-12)
-- [ ] 05-03: Playwright verification for human-verify checkpoints
+- [x] 05-03: Checkpoint response relay via MCP tool (2026-01-12)
 
 ### Phase 6: E2E Integration
 
@@ -118,7 +118,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6
 | 2. Session Management | 3/3            | Complete    | 2026-01-12 |
 | 3. MCP Server         | 3/3            | Complete    | 2026-01-12 |
 | 4. Web Dashboard      | 3/3            | Complete    | 2026-01-12 |
-| 5. GSD Integration    | 2/3            | In progress | -          |
+| 5. GSD Integration    | 3/3            | Complete    | 2026-01-12 |
 | 6. E2E Integration    | 0/3            | Not started | -          |
 
 ---
