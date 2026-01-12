@@ -1,4 +1,4 @@
-import type { SessionCompletedEvent, SessionFailedEvent } from '@gsd/core';
+import type { SessionCompletedEvent, SessionFailedEvent, SessionWaitingEvent } from '@gsd/core';
 import type { PersistentSessionManager } from '@gsd/session-manager';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
@@ -26,13 +26,15 @@ const waitForStateChangeSchema = {
 type StateChangeEvent =
   | { type: 'completed'; sessionId: string; event: SessionCompletedEvent }
   | { type: 'failed'; sessionId: string; event: SessionFailedEvent }
+  | { type: 'waiting'; sessionId: string; event: SessionWaitingEvent }
   | { type: 'timeout'; watchedSessions: string[] };
 
 /**
  * Registers the gsd_wait_for_state_change tool with the MCP server.
  *
- * This tool blocks until a session state changes (completed/failed) or timeout.
+ * This tool blocks until a session state changes (completed/failed/waiting) or timeout.
  * Much more efficient than polling - orchestrator calls once and waits.
+ * Detects wait states via PTY output parsing: menus, prompts, permission requests.
  *
  * @param server - The MCP server instance
  * @param manager - The PersistentSessionManager instance
@@ -129,6 +131,11 @@ export function registerWaitForStateChangeTool(
                   ...(result.type === 'failed' && {
                     error: result.event.error,
                   }),
+                  ...(result.type === 'waiting' && {
+                    waitType: result.event.waitType,
+                    menuOptions: result.event.menuOptions,
+                    trigger: result.event.trigger,
+                  }),
                 },
                 session: changedSession
                   ? {
@@ -166,7 +173,7 @@ export function registerWaitForStateChangeTool(
 
 /**
  * Waits for a state change event on any of the watched sessions.
- * Returns when a session completes/fails or when timeout is reached.
+ * Returns when a session completes/fails/enters wait state or when timeout is reached.
  */
 function waitForChange(
   manager: PersistentSessionManager,
@@ -196,6 +203,15 @@ function waitForChange(
       }
     };
 
+    const onWaiting = (event: SessionWaitingEvent): void => {
+      if (resolved) return;
+      if (sessionIdSet.has(event.sessionId)) {
+        resolved = true;
+        cleanup();
+        resolve({ type: 'waiting', sessionId: event.sessionId, event });
+      }
+    };
+
     // Set up timeout
     const timeoutHandle = globalThis.setTimeout(() => {
       if (resolved) return;
@@ -209,11 +225,13 @@ function waitForChange(
       globalThis.clearTimeout(timeoutHandle);
       manager.removeListener('session:completed', onCompleted);
       manager.removeListener('session:failed', onFailed);
+      manager.removeListener('session:waiting', onWaiting);
     };
 
     // Attach listeners
     manager.on('session:completed', onCompleted);
     manager.on('session:failed', onFailed);
+    manager.on('session:waiting', onWaiting);
 
     // Check if any watched sessions have already completed/failed
     // (race condition protection)

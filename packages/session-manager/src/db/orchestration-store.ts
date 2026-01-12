@@ -32,6 +32,23 @@ export interface OrchestrationState {
 }
 
 /**
+ * Map a raw database row to PhasePlan with camelCase properties.
+ */
+function mapRowToPhasePlan(row: Record<string, unknown>): PhasePlan {
+  return {
+    id: row.id as number,
+    projectPath: row.project_path as string,
+    phaseNumber: row.phase_number as number,
+    planNumber: row.plan_number as number,
+    planPath: row.plan_path as string,
+    status: row.status as PlanStatus,
+    createdAt: row.created_at as string,
+    executedAt: (row.executed_at as string | null) ?? null,
+    verifiedAt: (row.verified_at as string | null) ?? null,
+  };
+}
+
+/**
  * OrchestrationStore manages the orchestration state database.
  * Tracks plans, executions, and verify status to enforce physical barriers.
  */
@@ -80,10 +97,17 @@ export class OrchestrationStore {
   getState(projectPath: string): OrchestrationState {
     const row = this.db
       .prepare('SELECT * FROM orchestration_state WHERE project_path = ?')
-      .get(projectPath) as OrchestrationState | undefined;
+      .get(projectPath) as Record<string, unknown> | undefined;
 
     if (row) {
-      return row;
+      // Map snake_case DB columns to camelCase TypeScript properties
+      return {
+        projectPath: row.project_path as string,
+        highestExecutedPhase: row.highest_executed_phase as number,
+        highestPlannedPhase: row.highest_planned_phase as number,
+        pendingVerifyPhase: (row.pending_verify_phase as number | null) ?? null,
+        updatedAt: row.updated_at as string,
+      };
     }
 
     // Create default state
@@ -162,22 +186,24 @@ export class OrchestrationStore {
    * Get all plans for a project.
    */
   getPlans(projectPath: string): PhasePlan[] {
-    return this.db
+    const rows = this.db
       .prepare(
         'SELECT * FROM phase_plans WHERE project_path = ? ORDER BY phase_number, plan_number'
       )
-      .all(projectPath) as PhasePlan[];
+      .all(projectPath) as Record<string, unknown>[];
+    return rows.map(mapRowToPhasePlan);
   }
 
   /**
    * Get plans for a specific phase.
    */
   getPhasePlans(projectPath: string, phaseNumber: number): PhasePlan[] {
-    return this.db
+    const rows = this.db
       .prepare(
         'SELECT * FROM phase_plans WHERE project_path = ? AND phase_number = ? ORDER BY plan_number'
       )
-      .all(projectPath, phaseNumber) as PhasePlan[];
+      .all(projectPath, phaseNumber) as Record<string, unknown>[];
+    return rows.map(mapRowToPhasePlan);
   }
 
   /**

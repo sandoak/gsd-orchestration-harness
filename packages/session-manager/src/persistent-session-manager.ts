@@ -8,6 +8,7 @@ import type {
   SessionOutputEvent,
   SessionCompletedEvent,
   SessionFailedEvent,
+  SessionWaitingEvent,
 } from '@gsd/core';
 
 import { DatabaseConnection } from './db/database.js';
@@ -25,6 +26,7 @@ interface PersistentSessionManagerEvents {
   'session:output': [event: SessionOutputEvent];
   'session:completed': [event: SessionCompletedEvent];
   'session:failed': [event: SessionFailedEvent];
+  'session:waiting': [event: SessionWaitingEvent];
   'recovery:complete': [result: RecoveryResult];
 }
 
@@ -188,6 +190,11 @@ export class PersistentSessionManager extends EventEmitter<PersistentSessionMana
         endedAt: event.timestamp,
       });
       this.emit('session:failed', event);
+    });
+
+    // session:waiting → re-emit (no persistence needed for wait states)
+    this.sessionManager.on('session:waiting', (event) => {
+      this.emit('session:waiting', event);
     });
   }
 

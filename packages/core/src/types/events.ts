@@ -4,8 +4,19 @@ export type EventType =
   | 'session:started'
   | 'session:output'
   | 'session:checkpoint'
+  | 'session:waiting'
   | 'session:completed'
   | 'session:failed';
+
+/**
+ * Type of wait state detected from PTY output.
+ */
+export type WaitStateType =
+  | 'menu' // AskUserQuestion numbered menu
+  | 'prompt' // Regular input prompt (❯)
+  | 'permission' // Permission request (y/n, Allow?)
+  | 'continue' // Press Enter to continue
+  | 'unknown'; // Generic wait state
 
 export interface BaseEvent {
   type: EventType;
@@ -31,6 +42,15 @@ export interface SessionCheckpointEvent extends BaseEvent {
   checkpoint: CheckpointInfo;
 }
 
+export interface SessionWaitingEvent extends BaseEvent {
+  type: 'session:waiting';
+  waitType: WaitStateType;
+  /** Number of menu options if waitType is 'menu' */
+  menuOptions?: number;
+  /** Raw output snippet that triggered the detection */
+  trigger?: string;
+}
+
 export interface SessionCompletedEvent extends BaseEvent {
   type: 'session:completed';
   exitCode: number;
@@ -45,5 +65,6 @@ export type SessionEvent =
   | SessionStartedEvent
   | SessionOutputEvent
   | SessionCheckpointEvent
+  | SessionWaitingEvent
   | SessionCompletedEvent
   | SessionFailedEvent;

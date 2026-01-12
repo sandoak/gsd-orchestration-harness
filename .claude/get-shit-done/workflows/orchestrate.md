@@ -477,53 +477,69 @@ When a session completes, that session is DONE. The slot becomes available for a
 <step name="respond_to_prompt">
 When a session is at a user prompt (not a formal checkpoint):
 
+**CRITICAL: DO THE WORK - NEVER ASK THE USER**
+
+The orchestrator MUST autonomously handle ALL prompts by actually doing the work:
+
 1. **Analyze the prompt:**
    Read output to understand what's being asked
 
-2. **Auto-respond if possible:**
-   - Yes/No questions: Respond based on context
-   - Continue prompts: Usually respond "y" or press Enter
-   - Selection prompts: Choose appropriate option
+2. **ALWAYS do the actual work to answer:**
+   - "Does the app build?" → Actually run `npm run build` or `npm run dev` and check
+   - "Does feature X work?" → Actually test the feature using Bash, Playwright, or code inspection
+   - "Are there any errors?" → Actually check logs, run tests, inspect output
+   - Yes/No questions → Investigate and determine the answer yourself
+   - Continue prompts → Respond "y" or press Enter
+   - Selection prompts → Choose the most appropriate option based on context
 
-3. **Use `gsd_respond_checkpoint` or direct input:**
-
-   ```
-   gsd_respond_checkpoint(sessionId, "y")
-   gsd_respond_checkpoint(sessionId, "1")  // Select option 1
-   gsd_respond_checkpoint(sessionId, "continue")
-   ```
-
-4. **Surface to user if uncertain:**
-   If the prompt requires human judgment:
+3. **Respond immediately after determining the answer:**
 
    ```
-   Session [slot] is asking:
-   [prompt content]
-
-   How should I respond?
+   gsd_respond_checkpoint(sessionId, "1")  // Pass - you verified it works
+   gsd_respond_checkpoint(sessionId, "2")  // Fail - you found issues
+   gsd_respond_checkpoint(sessionId, "y")  // For yes/no prompts
    ```
+
+4. **NEVER stop to ask the user:**
+   - Do NOT surface questions to the user
+   - Do NOT wait for user input on verification questions
+   - The orchestrator IS the verifier - do the verification yourself
+   - Only inform the user of RESULTS, not questions
 
    </step>
 
 <step name="checkpoint_handling">
 When a formal checkpoint is detected:
 
+**CRITICAL: AUTONOMOUS VERIFICATION - DO THE WORK**
+
 **For checkpoint:human-verify (90%):**
 
 1. Get checkpoint details: `gsd_get_checkpoint(sessionId)`
-2. Attempt automated verification
-3. Respond: `gsd_respond_checkpoint(sessionId, "approved")` or surface to user
+2. **ACTUALLY PERFORM THE VERIFICATION:**
+   - If asked "Does the app build?" → Run the build command and check output
+   - If asked "Does the UI render?" → Use Playwright or curl to test
+   - If asked "Do tests pass?" → Run the test suite
+   - If asked "Does feature X work?" → Actually test the feature
+3. Based on YOUR verification results, respond:
+   - `gsd_respond_checkpoint(sessionId, "1")` - Pass (verified working)
+   - `gsd_respond_checkpoint(sessionId, "2")` - Fail (found issues)
 
 **For checkpoint:decision (9%):**
 
 1. Get options: `gsd_get_checkpoint(sessionId)`
-2. Present to user with context
-3. Relay choice: `gsd_respond_checkpoint(sessionId, "option-id")`
+2. **Make the decision yourself based on:**
+   - Project context and architecture
+   - Best practices
+   - What makes sense for the codebase
+3. Respond: `gsd_respond_checkpoint(sessionId, "option-id")`
 
 **For checkpoint:human-action (1%):**
 
+Physical actions only (e.g., "plug in device", "click physical button"):
+
 1. Get action details: `gsd_get_checkpoint(sessionId)`
-2. Alert user with instructions
+2. Alert user ONLY for truly physical actions
 3. Wait for "done": `gsd_respond_checkpoint(sessionId, "done")`
    </step>
 

@@ -9,6 +9,8 @@ import type {
   SessionOutputEvent,
   SessionCompletedEvent,
   SessionFailedEvent,
+  SessionWaitingEvent,
+  WaitStateType,
 } from '@gsd/core';
 import { MAX_SESSIONS, SESSION_SLOTS, DEFAULT_OUTPUT_BUFFER_SIZE } from '@gsd/core';
 import * as pty from 'node-pty';
@@ -20,11 +22,16 @@ interface ManagedSession {
   process: pty.IPty;
   outputBuffer: string[];
   lastPolledAt: Date;
+  /** Track last wait state to avoid duplicate events */
+  lastWaitState?: WaitStateType;
+  /** Debounce timer for wait state detection */
+  waitDebounceTimer?: ReturnType<typeof setTimeout>;
 }
 
 interface SessionManagerEvents {
   'session:started': [event: SessionStartedEvent];
   'session:output': [event: SessionOutputEvent];
+  'session:waiting': [event: SessionWaitingEvent];
   'session:completed': [event: SessionCompletedEvent];
   'session:failed': [event: SessionFailedEvent];
 }
@@ -310,6 +317,52 @@ export class SessionManager extends EventEmitter<SessionManagerEvents> {
   }
 
   /**
+   * Detect wait state type from output text.
+   * Returns null if no wait state is detected.
+   */
+  private detectWaitState(
+    output: string
+  ): { type: WaitStateType; menuOptions?: number; trigger: string } | null {
+    // Strip ANSI codes for pattern matching
+    // eslint-disable-next-line no-control-regex
+    const stripped = output.replace(/\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])/g, '');
+
+    // Menu detection: numbered options like "❯ 1." or "1." at start of line
+    // AskUserQuestion shows options like:
+    //   ❯ 1. Option one
+    //     2. Option two
+    const menuMatch = stripped.match(/❯\s*\d+\.\s+\S/);
+    if (menuMatch) {
+      // Count how many numbered options there are
+      const optionMatches = stripped.match(/^\s*\d+\.\s+\S/gm);
+      const menuOptions = optionMatches ? optionMatches.length : 1;
+      return { type: 'menu', menuOptions, trigger: menuMatch[0] };
+    }
+
+    // Permission prompt detection: (y/n), Allow?, etc.
+    const permissionMatch = stripped.match(/\(y\/n\)|Allow\?|Confirm\?|\[Y\/n\]|\[y\/N\]/i);
+    if (permissionMatch) {
+      return { type: 'permission', trigger: permissionMatch[0] };
+    }
+
+    // Continue prompt detection: Press Enter, press any key, etc.
+    const continueMatch = stripped.match(/press\s+enter|press\s+any\s+key|continue\?/i);
+    if (continueMatch) {
+      return { type: 'continue', trigger: continueMatch[0] };
+    }
+
+    // Regular prompt detection: ❯ at end of output (Claude prompt)
+    // Only detect if it's the last thing and there's no active spinner
+    const hasSpinner = stripped.match(/[✶✻✽✢·*]/);
+    const hasPrompt = stripped.match(/❯\s*$/);
+    if (hasPrompt && !hasSpinner) {
+      return { type: 'prompt', trigger: '❯' };
+    }
+
+    return null;
+  }
+
+  /**
    * Handles output from a session's process.
    */
   private handleOutput(sessionId: string, stream: 'stdout' | 'stderr', data: string): void {
@@ -339,6 +392,33 @@ export class SessionManager extends EventEmitter<SessionManagerEvents> {
       data,
     };
     this.emit('session:output', outputEvent);
+
+    // Debounced wait state detection
+    // Clear any pending detection
+    if (managed.waitDebounceTimer) {
+      clearTimeout(managed.waitDebounceTimer);
+    }
+
+    // Schedule wait state detection after output settles (300ms debounce)
+    managed.waitDebounceTimer = setTimeout(() => {
+      // Get recent output for detection (last ~2KB)
+      const recentOutput = managed.outputBuffer.slice(-10).join('');
+      const waitState = this.detectWaitState(recentOutput);
+
+      if (waitState && waitState.type !== managed.lastWaitState) {
+        managed.lastWaitState = waitState.type;
+
+        const waitingEvent: SessionWaitingEvent = {
+          type: 'session:waiting',
+          timestamp: new Date(),
+          sessionId,
+          waitType: waitState.type,
+          menuOptions: waitState.menuOptions,
+          trigger: waitState.trigger,
+        };
+        this.emit('session:waiting', waitingEvent);
+      }
+    }, 300);
   }
 
   /**
@@ -450,9 +530,40 @@ export class SessionManager extends EventEmitter<SessionManagerEvents> {
     if (!managed) {
       return false;
     }
-    // PTY requires \r (carriage return) to submit input
-    // Send input + double \r to handle Claude prompts that need two enters
-    managed.process.write(input + '\r\r');
+
+    // For terminal UI libraries (enquirer, prompts), we need to send
+    // input with proper timing to ensure it's processed correctly.
+    // These libraries read raw keystrokes and may miss rapid input.
+
+    if (input === '' || input === '\r' || input === '\n') {
+      // Just pressing Enter - for selection menus
+      // Send single Enter, then another after delay for prompts that need it
+      managed.process.write('\r');
+      globalThis.setTimeout(() => {
+        managed.process.write('\r');
+      }, 100);
+    } else if (/^\d+$/.test(input)) {
+      // Numeric input - likely selecting a menu option by number
+      // Some menus accept typing the number to jump to that option
+      // Send the number, small delay, then Enter
+      managed.process.write(input);
+      globalThis.setTimeout(() => {
+        managed.process.write('\r');
+        globalThis.setTimeout(() => {
+          managed.process.write('\r');
+        }, 100);
+      }, 50);
+    } else {
+      // Regular text input - send with trailing Enter
+      managed.process.write(input);
+      globalThis.setTimeout(() => {
+        managed.process.write('\r');
+        globalThis.setTimeout(() => {
+          managed.process.write('\r');
+        }, 100);
+      }, 50);
+    }
+
     return true;
   }
 

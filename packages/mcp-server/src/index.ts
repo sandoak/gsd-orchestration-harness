@@ -19,6 +19,7 @@ export { registerGetCheckpointTool } from './tools/get-checkpoint.js';
 export { registerGetOutputTool } from './tools/get-output.js';
 export { registerGetStateTool } from './tools/get-state.js';
 export { registerListSessionsTool } from './tools/list-sessions.js';
+export { registerMarkPhaseVerifiedTool } from './tools/mark-phase-verified.js';
 export { registerRespondCheckpointTool } from './tools/respond-checkpoint.js';
 export { registerSetExecutionStateTool } from './tools/set-execution-state.js';
 export { registerStartSessionTool } from './tools/start-session.js';
