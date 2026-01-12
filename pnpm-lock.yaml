@@ -57,6 +57,16 @@ importers:
 
   packages/core: {}
 
+  packages/session-manager:
+    dependencies:
+      '@gsd/core':
+        specifier: workspace:*
+        version: link:../core
+    devDependencies:
+      typescript:
+        specifier: ^5.3.0
+        version: 5.9.3
+
 packages:
 
   '@emnapi/core@1.8.1':
