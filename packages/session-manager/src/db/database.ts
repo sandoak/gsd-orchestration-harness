@@ -31,7 +31,8 @@ CREATE INDEX IF NOT EXISTS idx_outputs_session_id ON session_outputs(session_id)
 CREATE INDEX IF NOT EXISTS idx_outputs_timestamp ON session_outputs(session_id, timestamp);
 `;
 
-const DEFAULT_DB_DIR = join(homedir(), '.gsd-harness');
+// Use data subdirectory to avoid conflict with harness installation at ~/.gsd-harness
+const DEFAULT_DB_DIR = join(homedir(), '.gsd-harness', 'data');
 const DEFAULT_DB_PATH = join(DEFAULT_DB_DIR, 'sessions.db');
 
 /**

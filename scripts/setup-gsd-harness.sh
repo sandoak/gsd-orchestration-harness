@@ -94,6 +94,18 @@ find_or_install_harness() {
     echo -e "${YELLOW}!${NC} Harness not installed. Cloning from GitHub..."
     echo ""
 
+    # Migrate existing database if present (from old database location)
+    if [ -f "$HARNESS_DEFAULT_PATH/sessions.db" ] && [ ! -f "$HARNESS_DEFAULT_PATH/package.json" ]; then
+        echo -e "${YELLOW}!${NC} Found existing database at $HARNESS_DEFAULT_PATH"
+        echo "   Migrating to data subdirectory..."
+        mkdir -p "$HARNESS_DEFAULT_PATH/data"
+        mv "$HARNESS_DEFAULT_PATH/sessions.db" "$HARNESS_DEFAULT_PATH/data/"
+        [ -f "$HARNESS_DEFAULT_PATH/sessions.db-wal" ] && mv "$HARNESS_DEFAULT_PATH/sessions.db-wal" "$HARNESS_DEFAULT_PATH/data/"
+        [ -f "$HARNESS_DEFAULT_PATH/sessions.db-shm" ] && mv "$HARNESS_DEFAULT_PATH/sessions.db-shm" "$HARNESS_DEFAULT_PATH/data/"
+        rm -rf "$HARNESS_DEFAULT_PATH"  # Remove empty dir, will be recreated by clone
+        echo -e "${GREEN}✓${NC} Database migrated to $HARNESS_DEFAULT_PATH/data/"
+    fi
+
     if ! git clone "$HARNESS_REPO" "$HARNESS_DEFAULT_PATH"; then
         echo -e "${RED}✗${NC} Failed to clone harness repository"
         echo "   Please check your internet connection and try again."
