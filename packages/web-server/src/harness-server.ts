@@ -40,8 +40,7 @@ export class HarnessServer {
       getSessions: (): Session[] => this.manager.listSessions(),
     });
 
-    // Register WebSocket and API routes
-    this.registerWebSocket();
+    // Register API routes (sync)
     this.registerApiRoutes();
 
     // Wire manager events to WebSocket broadcast
@@ -50,10 +49,10 @@ export class HarnessServer {
 
   /**
    * Registers WebSocket support on the HTTP server.
+   * Must be called before start().
    */
-  private registerWebSocket(): void {
-    // Use void to handle the promise returned by register
-    void this.wsServer.register(this.httpServer.app);
+  private async registerWebSocket(): Promise<void> {
+    await this.wsServer.register(this.httpServer.app);
   }
 
   /**
@@ -93,8 +92,11 @@ export class HarnessServer {
 
   /**
    * Starts the server.
+   * Registers WebSocket before starting HTTP server.
    */
   async start(): Promise<void> {
+    // Register WebSocket plugin (must be before listen)
+    await this.registerWebSocket();
     await this.httpServer.start();
   }
 
