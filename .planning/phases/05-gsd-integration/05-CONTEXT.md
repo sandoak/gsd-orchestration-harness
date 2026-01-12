@@ -1,68 +1,77 @@
 # Phase 5: GSD Integration - Context
 
-**Gathered:** 2026-01-12
+**Gathered:** 2026-01-12 (revised)
 **Status:** Ready for planning
 
 <vision>
 ## How This Should Work
 
-The harness is a **standalone server** that multiple orchestrating Claudes connect to. Each orchestrator manages its own session — the harness doesn't do checkpoint resolution itself, it just detects checkpoints and notifies the connected orchestrator.
+The harness runs on the **same machine** as Claude Code — this is essential because Claude CLI needs the user's OAuth tokens. The harness + MCP server are local infrastructure for a single GSD orchestrator.
 
-When a session hits a checkpoint:
+**The orchestrator is this Claude conversation.** When I call `gsd_start_session`, a Claude CLI process spawns in one of the 3 slots. When that session hits a checkpoint, I get notified via MCP and handle the verification myself (using Playwright MCP, reading files, etc.).
 
-1. Harness detects the checkpoint in session output
-2. Harness classifies it (human-verify, decision, human-action)
-3. Harness notifies the connected orchestrator: "Your session hit a checkpoint, here's the content"
-4. Orchestrator handles verification locally (using its own Playwright MCP)
-5. Orchestrator reports back (approve, fail, needs more work)
-6. Harness relays that response to the Claude CLI session
+**Slot assignment follows the GSD pipeline:**
 
-The 3 slots are for **different projects** — each orchestrator connects and manages one slot. This is cleaner than trying to run parallel phases of the same project, since planning depends on implementation results.
+- Slot 1 = Planning (running `/gsd:plan-phase`)
+- Slot 2 = Execution (running `/gsd:execute-plan`)
+- Slot 3 = Verification (handling checkpoints, running tests)
+
+Work flows through the pipeline. When planning completes, execution can start. When execution hits a checkpoint, verification slot handles it.
+
+**Not everything parallelizes.** Planning depends on prior implementation results (SUMMARYs contain decisions). So slots aren't always all active — sometimes it's serial, sometimes parallel, depending on GSD workflow state.
 
 </vision>
 
 <essential>
 ## What Must Be Nailed
 
-- **State parsing** - Read STATE.md, ROADMAP.md, PLAN.md to understand where a session is in its workflow
-- **Checkpoint detection** - Recognize when session output contains a checkpoint, parse its content
-- **Checkpoint classification** - Distinguish human-verify, decision, human-action types
-- **Orchestrator notifications** - Push checkpoint events to the connected orchestrator via WebSocket with full checkpoint content
-- **Response relay** - Receive orchestrator's verification result and send it to the CLI session
+The **checkpoint handling loop** is the core automation:
 
-All five are equally critical — the integration doesn't work without any of them.
+1. **Detect** — Recognize checkpoint in session output (using CHECKPOINT_PATTERNS)
+2. **Parse** — Extract checkpoint content (what-built, how-to-verify, options, etc.)
+3. **Notify** — Alert the orchestrator (this Claude) via MCP tool response
+4. **Verify** — Orchestrator performs verification (Playwright, file checks, etc.)
+5. **Relay** — Send orchestrator's response back to the CLI session's stdin
+
+If this loop works reliably, the harness is useful. Everything else is secondary.
 
 </essential>
 
 <boundaries>
 ## What's Out of Scope
 
-- **Multi-tenant auth** - No authentication/permissions between orchestrators yet. Anyone can connect. This is Phase 6 or later.
-- **Playwright in harness** - Harness doesn't run verification. Orchestrator runs Playwright locally and reports back.
-- **Checkpoint auto-resolution logic** - Harness just detects and relays. Smart handling is the orchestrator's job.
+- **Multi-project support** — All 3 slots work on the same project. No switching between different projects in this phase.
+- **Smart parallelization** — No automatic detection of what can run in parallel. The orchestrator (this Claude) decides which slots do what.
+- **Remote deployment** — Harness must run locally (same machine as Claude Code for OAuth). Remote/cloud is future work.
 
 </boundaries>
 
 <specifics>
 ## Specific Ideas
 
-- Checkpoint detection should use the CHECKPOINT_PATTERNS from @gsd/core (established in Phase 3)
-- WebSocket messages should include full checkpoint content so orchestrator can parse verification steps
-- Response relay needs to handle the different response types: approve, fail, needs-more-work, etc.
-- State parsing is MVP regex for now — future enhancement could be full AST parsing
+- MCP tools are the primary interface — the orchestrator calls `gsd_start_session`, `gsd_get_checkpoint`, etc.
+- WebSocket is for dashboard UI, not orchestrator communication (orchestrator uses MCP)
+- Checkpoint response goes to session stdin (`sendInput()` method on SessionManager)
+- State parsing helps orchestrator understand where each slot is in its workflow
 
 </specifics>
 
 <notes>
 ## Additional Context
 
-Original thought was running implementation and planning phases in parallel, but planning depends on implementation results (SUMMARY.md contains decisions, patterns). Serial execution per project makes more sense.
+Previous context described "multiple orchestrating Claudes connecting to a server" — that's wrong. This is simpler:
 
-The harness becomes infrastructure that orchestrators connect to — like a session management server. Each orchestrator is responsible for its own project's checkpoint handling.
+- One GSD orchestrator (this Claude conversation)
+- One harness (local process)
+- Three session slots (for pipeline stages)
+- MCP tools for control
+- Dashboard for visibility
+
+The harness is acceleration infrastructure, not a multi-tenant server.
 
 </notes>
 
 ---
 
 _Phase: 05-gsd-integration_
-_Context gathered: 2026-01-12_
+_Context gathered: 2026-01-12 (revised)_
