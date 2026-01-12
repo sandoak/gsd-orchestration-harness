@@ -208,24 +208,24 @@ The harness enables Claude to orchestrate multiple GSD sessions in parallel usin
 ### Example Orchestration Flow
 
 ```
-Slot 0: running  → Phase 2 Plan 1
-Slot 1: running  → Phase 2 Plan 2
-Slot 2: idle     → (waiting for work)
+Slot 1: running  → Phase 2 Plan 1
+Slot 2: running  → Phase 2 Plan 2
+Slot 3: idle     → (waiting for work)
 
-[Slot 0 completes]
-Slot 0: idle     → Assigning Phase 2 Plan 3...
-Slot 1: running  → Phase 2 Plan 2
-Slot 2: idle     → (no more parallel-safe work)
+[Slot 1 completes]
+Slot 1: idle     → Assigning Phase 2 Plan 3...
+Slot 2: running  → Phase 2 Plan 2
+Slot 3: idle     → (no more parallel-safe work)
 
-[Slot 1 hits checkpoint]
-Slot 0: running  → Phase 2 Plan 3
-Slot 1: waiting  → CHECKPOINT: decision needed
-Slot 2: idle
+[Slot 2 hits checkpoint]
+Slot 1: running  → Phase 2 Plan 3
+Slot 2: waiting  → CHECKPOINT: decision needed
+Slot 3: idle
 
 [Orchestrator handles checkpoint]
-gsd_get_checkpoint("slot-1") → decision options
-gsd_respond_checkpoint("slot-1", "option-a")
-Slot 1: running  → continuing...
+gsd_get_checkpoint("slot-2") → decision options
+gsd_respond_checkpoint("slot-2", "option-a")
+Slot 2: running  → continuing...
 ```
 
 ### Usage

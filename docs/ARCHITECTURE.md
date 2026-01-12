@@ -485,9 +485,9 @@ Phase Dependencies:
                               └── Plan 2-03 (depends on 2-01, 2-02)
 
 Slot Assignment:
-  Slot 0 ◄─── Plan 2-01
-  Slot 1 ◄─── Plan 2-02  (parallel)
-  Slot 2 ◄─── (waiting for 2-01, 2-02 to complete before 2-03)
+  Slot 1 ◄─── Plan 2-01
+  Slot 2 ◄─── Plan 2-02  (parallel)
+  Slot 3 ◄─── (waiting for 2-01, 2-02 to complete before 2-03)
 ```
 
 ### Checkpoint Aggregation
@@ -495,9 +495,9 @@ Slot Assignment:
 When multiple slots hit checkpoints simultaneously:
 
 ```
-Slot 0: waiting_checkpoint (human-verify)
-Slot 1: waiting_checkpoint (decision)
-Slot 2: running
+Slot 1: waiting_checkpoint (human-verify)
+Slot 2: waiting_checkpoint (decision)
+Slot 3: running
 
 Orchestrator handling order:
 1. human-verify first (can often auto-approve)

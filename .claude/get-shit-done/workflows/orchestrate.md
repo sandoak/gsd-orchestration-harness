@@ -11,9 +11,9 @@ Orchestrate the **complete GSD lifecycle** using 3 specialized parallel session 
 
 The harness provides 3 purpose-specific slots:
 
-- **Slot 0 (Planning)**: Runs `/gsd:plan-phase X` - creates PLAN.md files
-- **Slot 1 (Execution)**: Runs `/gsd:execute-plan [path]` - builds the code
-- **Slot 2 (Verify)**: Runs verification tasks - tests, UAT, quality checks
+- **Slot 1 (Planning)**: Runs `/gsd:plan-phase X` - creates PLAN.md files
+- **Slot 2 (Execution)**: Runs `/gsd:execute-plan [path]` - builds the code
+- **Slot 3 (Verify)**: Runs verification tasks - tests, UAT, quality checks
 
 Claude becomes the session coordinator—monitoring when sessions reach user prompts/hooks, responding to checkpoints, and keeping all slots productively busy.
 
@@ -27,7 +27,7 @@ Claude becomes the session coordinator—monitoring when sessions reach user pro
 │  GSD ORCHESTRATION HARNESS - Parallel Slot Architecture            │
 ├─────────────────────────────────────────────────────────────────────┤
 │                                                                      │
-│  SLOT 0: PLANNING          SLOT 1: EXECUTION        SLOT 2: VERIFY  │
+│  SLOT 1: PLANNING          SLOT 2: EXECUTION        SLOT 3: VERIFY  │
 │  ┌─────────────────┐       ┌─────────────────┐      ┌─────────────┐ │
 │  │ /gsd:plan-phase │       │ /gsd:execute-   │      │ /gsd:verify │ │
 │  │                 │       │     plan        │      │   -work     │ │
@@ -46,9 +46,9 @@ Claude becomes the session coordinator—monitoring when sessions reach user pro
 
 ```
 Time →
-Slot 0 (Plan):    [Plan P1]──────[Plan P2]──────[Plan P3]──────
-Slot 1 (Execute):        [Exec P1-01]──[Exec P1-02]──[Exec P2-01]──
-Slot 2 (Verify):                [Verify P1-01]──[Verify P1-02]──────
+Slot 1 (Plan):    [Plan P1]──────[Plan P2]──────[Plan P3]──────
+Slot 2 (Execute):        [Exec P1-01]──[Exec P1-02]──[Exec P2-01]──
+Slot 3 (Verify):                [Verify P1-01]──[Verify P1-02]──────
 ```
 
 </slot_architecture>
@@ -105,7 +105,7 @@ Build work queues for each slot type.
 <step name="build_work_queues">
 **Build separate queues for each slot type:**
 
-**Planning Queue (Slot 0):**
+**Planning Queue (Slot 1):**
 
 ```
 [0] /gsd:plan-phase 1
@@ -153,9 +153,9 @@ Present current harness state:
 ║  GSD ORCHESTRATION HARNESS                                            ║
 ╠══════════════════════════════════════════════════════════════════════╣
 ║                                                                        ║
-║  PLANNING (Slot 0):   [state]  Phase 2 planning                       ║
-║  EXECUTION (Slot 1):  [state]  Phase 1 Plan 2 executing               ║
-║  VERIFY (Slot 2):     [state]  Phase 1 Plan 1 verifying               ║
+║  PLANNING (Slot 1):   [state]  Phase 2 planning                       ║
+║  EXECUTION (Slot 2):  [state]  Phase 1 Plan 2 executing               ║
+║  VERIFY (Slot 3):     [state]  Phase 1 Plan 1 verifying               ║
 ║                                                                        ║
 ║  Project: [project name]                                              ║
 ║  Pipeline: Plan → Execute → Verify                                    ║
@@ -200,63 +200,156 @@ Sessions reach user prompts/hooks when they need orchestrator response. Detect v
 **When detected:** Route to appropriate handler (checkpoint or prompt response)
 </step>
 
+<step name="session_tracking">
+**CRITICAL: Maintain orchestrator state to prevent issues**
+
+The orchestrator MUST track:
+
+```
+orchestrator_state = {
+  active_sessions: {
+    planning: { session_id, command, started_at } | null,
+    execution: { session_id, command, started_at } | null,
+    verify: { session_id, command, started_at } | null,
+  },
+  pending_start: Set<slot_type>,  // Slots where start was just called
+  last_poll: timestamp,
+}
+```
+
+**Before starting a session:**
+
+1. Call `gsd_list_sessions` to check current state
+2. Only start if slot is truly idle (not pending, not running)
+3. Mark slot as `pending_start` immediately after calling `gsd_start_session`
+4. Remove from `pending_start` after first successful output poll
+
+**This prevents duplicate sessions caused by:**
+
+- Calling start_session twice before first registers
+- Race conditions between checking and starting
+
+</step>
+
+<step name="cli_initialization">
+**CRITICAL: Claude CLI takes time to initialize**
+
+After calling `gsd_start_session`, the Claude CLI process needs 5-15 seconds to:
+
+1. Load Claude Code environment
+2. Parse project files
+3. Begin executing the command
+
+**DO NOT poll for output immediately after starting a session!**
+
+**Initialization protocol:**
+
+1. Call `gsd_start_session` and record session ID
+2. Wait 10 seconds before first output poll
+3. If output is still empty, wait another 10 seconds
+4. After 30 seconds of empty output, check if session failed
+
+**Empty output handling:**
+
+```
+if output == "" and session.status == "running":
+  if elapsed_since_start < 30 seconds:
+    # Normal - CLI still initializing
+    continue polling
+  else:
+    # Potential issue - check session health
+    check gsd_list_sessions for session status
+```
+
+</step>
+
 <step name="orchestration_loop">
 **Main orchestration loop - repeat until all work complete:**
 
+**Pre-loop setup:**
+
+- Initialize orchestrator_state tracking (see session_tracking step)
+- Set initial poll delay for new sessions: 10 seconds
+
 1. **Check all slot statuses:**
    Call `gsd_list_sessions` to get current state of all 3 slots.
+   Update orchestrator_state.active_sessions based on response.
 
-2. **Check for sessions waiting for input:**
-   For each slot, check if it's at a user prompt:
+2. **Wait for new sessions to initialize:**
+   For any session started in the last 10 seconds:
+   - Skip output polling for now (CLI initializing)
+   - Mark as "initializing" in status display
+
+3. **Check for sessions waiting for input:**
+   For each running slot (not initializing):
    - Call `gsd_get_output(sessionId, lines=20)`
-   - Look for prompt patterns (see detect_user_prompt)
+   - If empty: Continue (may still be working)
+   - If has content: Look for prompt patterns (see detect_user_prompt)
    - If waiting: Route to appropriate handler
 
-3. **Handle checkpoints:**
+4. **Handle checkpoints:**
    For slots in `waiting_checkpoint` state:
    - Call `gsd_get_checkpoint(sessionId)`
    - Route to checkpoint_handling step
    - Respond and continue
 
-4. **Handle completed slots:**
+5. **Handle completed slots:**
    When a slot completes:
    - **Planning slot**: Refresh execution queue (new PLAN.md files)
    - **Execution slot**: Refresh verification queue, add to verify queue
    - **Verify slot**: Mark phase/plan as fully complete
+   - Clear from orchestrator_state.active_sessions
    - Assign next work from appropriate queue
 
-5. **Handle failed slots:**
+6. **Handle failed slots:**
    - Get output, analyze error
+   - Clear from orchestrator_state.active_sessions
    - Offer: Retry, Skip, or Investigate
    - See error_handling step
 
-6. **Assign work to idle slots:**
+7. **Assign work to idle slots (with duplicate prevention):**
 
-   **Slot 0 (Planning) idle:**
+   **Before assigning ANY work:**
+   - Verify slot is not in orchestrator_state.pending_start
+   - Verify slot is not in orchestrator_state.active_sessions
+   - Check gsd_list_sessions confirms slot is idle
+
+   **Slot 1 (Planning) idle:**
    - Check planning queue
    - Assign next phase that needs planning
    - `gsd_start_session(workingDir, "/gsd:plan-phase X")`
+   - Record in orchestrator_state.active_sessions.planning
+   - Add to orchestrator_state.pending_start
 
-   **Slot 1 (Execution) idle:**
+   **Slot 2 (Execution) idle:**
    - Check execution queue
    - Assign next PLAN.md that needs execution
    - `gsd_start_session(workingDir, "/gsd:execute-plan [path]")`
+   - Record in orchestrator_state.active_sessions.execution
+   - Add to orchestrator_state.pending_start
 
-   **Slot 2 (Verify) idle:**
+   **Slot 3 (Verify) idle:**
    - Check verification queue
    - Assign next completed execution that needs verification
    - `gsd_start_session(workingDir, "/gsd:verify-work")`
+   - Record in orchestrator_state.active_sessions.verify
+   - Add to orchestrator_state.pending_start
 
-7. **Refresh queues after completions:**
+8. **Refresh queues after completions:**
    - After planning: Scan for new PLAN.md files
    - After execution: Scan for new SUMMARY.md files
    - Update queues accordingly
 
-8. **Check if done:**
+9. **Check if done:**
    - All queues empty AND all slots idle: Complete
    - Otherwise: Continue loop
 
-**Polling interval:** Every 5-10 seconds to catch prompts quickly.
+**Polling intervals:**
+
+- New sessions (< 10 seconds old): Skip output polling
+- Running sessions: Poll every 5-10 seconds
+- Use `gsd_list_sessions` to refresh slot states each iteration
+
 </step>
 
 <step name="respond_to_prompt">
@@ -348,9 +441,9 @@ Pipeline Status:
   VERIFY:     Phase 1 of 5 [██░░░░░░░░] 20%
 
 Active Sessions:
-  Slot 0 (Plan):    Planning Phase 3
-  Slot 1 (Execute): Executing 02-02-PLAN.md
-  Slot 2 (Verify):  Verifying 01-03 execution
+  Slot 1 (Plan):    Planning Phase 3
+  Slot 2 (Execute): Executing 02-02-PLAN.md
+  Slot 3 (Verify):  Verifying 01-03 execution
 
 Recently Completed:
   ✓ Phase 1 fully verified
@@ -376,7 +469,7 @@ When a session fails:
 ```
 [PLANNING/EXECUTION/VERIFY] FAILED
 
-Slot: [0/1/2]
+Slot: [1/2/3]
 Task: [what was being done]
 Error: [summary]
 
@@ -466,18 +559,18 @@ Quick reference for harness MCP tools:
 # Orchestrator:
 # 1. Checks harness - 3 slots available
 # 2. Builds queues - Phase 1 needs planning
-# 3. Assigns Slot 0: /gsd:plan-phase 1
+# 3. Assigns Slot 1: /gsd:plan-phase 1
 # 4. Monitors for completion
-# 5. When planning done: Assigns Slot 1 execution, Slot 0 next planning
+# 5. When planning done: Assigns Slot 2 execution, Slot 1 next planning
 # 6. Pipeline runs until complete
 ```
 
 **Parallel pipeline in action:**
 
 ```
-Slot 0: Plan Phase 1 → Plan Phase 2 → Plan Phase 3 → idle
-Slot 1: wait → Execute 01-01 → Execute 01-02 → Execute 02-01
-Slot 2: wait → wait → Verify 01-01 → Verify 01-02
+Slot 1: Plan Phase 1 → Plan Phase 2 → Plan Phase 3 → idle
+Slot 2: wait → Execute 01-01 → Execute 01-02 → Execute 02-01
+Slot 3: wait → wait → Verify 01-01 → Verify 01-02
 ```
 
 **Detecting and responding to prompt:**
@@ -500,9 +593,9 @@ gsd_respond_checkpoint("session-1", "1")
 <success_criteria>
 Orchestration succeeds when:
 
-- [ ] All phases planned (Slot 0 completed all planning)
-- [ ] All plans executed (Slot 1 completed all execution)
-- [ ] All work verified (Slot 2 completed all verification)
+- [ ] All phases planned (Slot 1 completed all planning)
+- [ ] All plans executed (Slot 2 completed all execution)
+- [ ] All work verified (Slot 3 completed all verification)
 - [ ] All checkpoints/prompts handled
 - [ ] No failed sessions (or failures acknowledged)
 - [ ] STATE.md updated with completion
