@@ -625,3 +625,37 @@ Orchestration succeeds when:
 - Pipeline: Plan → Execute → Verify flows continuously
 - Different phases can be at different stages simultaneously
   </guidelines>
+
+<orphan_prevention>
+**Session Lifecycle and Orphan Prevention**
+
+The harness includes automatic orphan prevention mechanisms:
+
+**Automatic Cleanup:**
+
+1. **On Harness Restart**: Orphaned sessions from previous runs are detected and their processes are killed
+2. **Session Timeout**: Sessions not polled for 10 minutes are automatically terminated
+3. **Graceful Shutdown**: When harness stops, all running sessions are terminated
+
+**Orchestrator Responsibilities:**
+
+1. **Poll regularly**: Call `gsd_get_output` at least every 5-10 seconds to keep sessions alive
+2. **Clean exit**: Before stopping orchestration, call `gsd_end_session` for each running session
+3. **Handle errors**: If orchestrator crashes, harness will clean up on next restart
+
+**Dashboard Monitoring:**
+
+- Sessions show `lastPolledAt` timestamp
+- Stale sessions (not polled for 10+ minutes) are flagged
+- Access stale sessions API: `GET /api/sessions/stale`
+
+**If Sessions Become Orphaned:**
+
+1. Restart Claude Code (harness will kill orphaned processes)
+2. Or manually check and terminate:
+   ```
+   gsd_list_sessions  # Find running sessions
+   gsd_end_session(sessionId)  # Terminate each
+   ```
+
+</orphan_prevention>
