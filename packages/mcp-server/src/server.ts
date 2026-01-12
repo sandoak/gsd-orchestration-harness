@@ -3,7 +3,9 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 
 import { registerEndSessionTool } from './tools/end-session.js';
+import { registerGetCheckpointTool } from './tools/get-checkpoint.js';
 import { registerGetOutputTool } from './tools/get-output.js';
+import { registerGetStateTool } from './tools/get-state.js';
 import { registerListSessionsTool } from './tools/list-sessions.js';
 import { registerStartSessionTool } from './tools/start-session.js';
 
@@ -53,6 +55,8 @@ export class GsdMcpServer {
 
     // 03-03: Output and state tools
     registerGetOutputTool(this.server, this.manager);
+    registerGetStateTool(this.server, this.manager);
+    registerGetCheckpointTool(this.server, this.manager);
   }
 
   /**
