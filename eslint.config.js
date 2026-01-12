@@ -109,6 +109,9 @@ export default [
         clearTimeout: 'readonly',
         setInterval: 'readonly',
         clearInterval: 'readonly',
+        // DOM types
+        HTMLDivElement: 'readonly',
+        ResizeObserver: 'readonly',
         // React 19 JSX transform - React is not needed in scope
         React: 'readonly',
       },
