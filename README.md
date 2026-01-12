@@ -59,6 +59,25 @@ The harness provides 7 MCP tools for session orchestration:
 | `gsd_get_checkpoint`     | Get checkpoint info if session is waiting       |
 | `gsd_respond_checkpoint` | Send a response to a waiting checkpoint         |
 
+## Quick Setup for New Projects
+
+Run the setup script from your project directory:
+
+```bash
+# Option 1: If you have the harness cloned locally
+/path/to/gsd-orchestration-harness/scripts/setup-project.sh
+
+# Option 2: Download and run
+curl -sSL https://raw.githubusercontent.com/[org]/gsd-orchestration-harness/main/scripts/setup-project.sh | bash
+```
+
+The script will:
+
+- Locate or install the harness
+- Create/update `.mcp.json` in your project
+- Verify GSD commands are available
+- Provide next steps
+
 ## Claude Code Integration
 
 Add the harness to your Claude Code configuration:
