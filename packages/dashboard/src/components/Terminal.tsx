@@ -28,9 +28,11 @@ export const Terminal = forwardRef<TerminalHandle, TerminalProps>(
     const { output } = useSessionOutput(sessionId);
 
     // Safe fit function that checks dimensions and catches errors
+    // Also notifies the backend to resize the PTY
     const safeFit = useCallback(() => {
       const container = containerRef.current;
       const fitAddon = fitAddonRef.current;
+      const terminal = terminalRef.current;
 
       if (!container || !fitAddon) return;
 
@@ -40,10 +42,22 @@ export const Terminal = forwardRef<TerminalHandle, TerminalProps>(
 
       try {
         fitAddon.fit();
+
+        // Notify backend of new dimensions so PTY can be resized
+        if (terminal && sessionId) {
+          const { cols, rows } = terminal;
+          fetch(`/api/sessions/${sessionId}/resize`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ cols, rows }),
+          }).catch(() => {
+            // Silently ignore resize errors - session may have ended
+          });
+        }
       } catch {
         // Silently ignore fit errors - container may not be ready yet
       }
-    }, []);
+    }, [sessionId]);
 
     // Expose terminal methods to parent
     useImperativeHandle(ref, () => ({

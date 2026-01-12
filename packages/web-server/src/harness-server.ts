@@ -86,6 +86,27 @@ export class HarnessServer {
         timeoutMs: this.manager.getSessionTimeout(),
       };
     });
+
+    // POST /api/sessions/:sessionId/resize - resize a session's PTY
+    this.httpServer.app.post<{
+      Params: { sessionId: string };
+      Body: { cols: number; rows: number };
+    }>('/api/sessions/:sessionId/resize', async (request, reply) => {
+      const { sessionId } = request.params;
+      const { cols, rows } = request.body;
+
+      if (!cols || !rows || typeof cols !== 'number' || typeof rows !== 'number') {
+        return reply.status(400).send({ error: 'cols and rows are required numbers' });
+      }
+
+      const success = this.manager.resize(sessionId, cols, rows);
+
+      if (!success) {
+        return reply.status(404).send({ error: `Session not found: ${sessionId}` });
+      }
+
+      return { success: true, sessionId, cols, rows };
+    });
   }
 
   /**

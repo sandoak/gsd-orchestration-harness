@@ -325,6 +325,18 @@ export class PersistentSessionManager extends EventEmitter<PersistentSessionMana
   }
 
   /**
+   * Resizes a session's PTY to match the terminal viewport.
+   *
+   * @param sessionId - ID of the session
+   * @param cols - Number of columns
+   * @param rows - Number of rows
+   * @returns true if resized, false if session not found
+   */
+  resize(sessionId: string, cols: number, rows: number): boolean {
+    return this.sessionManager.resize(sessionId, cols, rows);
+  }
+
+  /**
    * Closes the database connection and terminates any running sessions.
    */
   async close(): Promise<void> {

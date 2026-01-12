@@ -417,4 +417,20 @@ export class SessionManager extends EventEmitter<SessionManagerEvents> {
     managed.process.write(input + '\n');
     return true;
   }
+
+  /**
+   * Resizes a session's PTY to match the terminal viewport.
+   * @param sessionId - ID of the session
+   * @param cols - Number of columns
+   * @param rows - Number of rows
+   * @returns true if resized, false if session not found
+   */
+  resize(sessionId: string, cols: number, rows: number): boolean {
+    const managed = this.sessions.get(sessionId);
+    if (!managed) {
+      return false;
+    }
+    managed.process.resize(cols, rows);
+    return true;
+  }
 }
