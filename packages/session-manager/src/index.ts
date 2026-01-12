@@ -1,4 +1,13 @@
-// Session manager exports
+// Primary API - PersistentSessionManager with automatic SQLite persistence
+export {
+  PersistentSessionManager,
+  type PersistentSessionManagerOptions,
+} from './persistent-session-manager.js';
+
+// Recovery utilities
+export { recoverOrphanedSessions, type RecoveryResult } from './recovery.js';
+
+// Low-level session manager (for advanced use cases)
 export { SessionManager, type SessionManagerOptions } from './session-manager.js';
 
 // Database exports
