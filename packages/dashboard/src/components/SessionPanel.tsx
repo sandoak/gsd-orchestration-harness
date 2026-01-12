@@ -16,7 +16,7 @@ export function SessionPanel() {
   };
 
   return (
-    <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+    <div className="grid h-full grid-cols-1 gap-4 lg:grid-cols-3">
       <SessionSlot slot={1} session={getSessionForSlot(1)} />
       <SessionSlot slot={2} session={getSessionForSlot(2)} />
       <SessionSlot slot={3} session={getSessionForSlot(3)} />

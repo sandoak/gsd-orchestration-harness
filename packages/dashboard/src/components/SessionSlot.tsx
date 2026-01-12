@@ -1,5 +1,7 @@
 import type { Session, SessionStatus } from '../types';
 
+import { Terminal } from './Terminal';
+
 interface SessionSlotProps {
   slot: 1 | 2 | 3;
   session: Session | undefined;
@@ -14,18 +16,18 @@ const statusColors: Record<SessionStatus, { bg: string; text: string; label: str
 };
 
 export function SessionSlot({ slot, session }: SessionSlotProps) {
+  const isWaitingCheckpoint = session?.status === 'waiting_checkpoint';
+
   if (!session) {
     return (
-      <div className="flex flex-col rounded-lg border-2 border-dashed border-slate-600 bg-slate-800/50 p-4">
+      <div className="flex h-full flex-col rounded-lg border-2 border-dashed border-slate-600 bg-slate-800/50 p-4">
         <div className="mb-2 flex items-center justify-between">
           <span className="text-sm font-medium text-slate-400">Slot {slot}</span>
           <span className="rounded bg-slate-700 px-2 py-0.5 text-xs text-slate-400">Empty</span>
         </div>
-        <div className="flex flex-1 items-center justify-center text-slate-500">
+        <div className="flex flex-1 items-center justify-center rounded bg-slate-900/50 text-slate-500">
           <span className="text-sm">No active session</span>
         </div>
-        {/* Reserve space for terminal (added in 04-03) */}
-        <div className="mt-4 h-48 rounded bg-slate-900/50" />
       </div>
     );
   }
@@ -33,12 +35,23 @@ export function SessionSlot({ slot, session }: SessionSlotProps) {
   const status = statusColors[session.status];
 
   return (
-    <div className="flex flex-col rounded-lg border border-slate-600 bg-slate-800 p-4">
+    <div
+      className={`flex h-full flex-col rounded-lg border bg-slate-800 p-4 ${
+        isWaitingCheckpoint ? 'border-2 border-yellow-500' : 'border-slate-600'
+      }`}
+    >
       <div className="mb-2 flex items-center justify-between">
         <span className="text-sm font-medium text-slate-300">Slot {slot}</span>
-        <span className={`rounded px-2 py-0.5 text-xs ${status.bg} ${status.text}`}>
-          {status.label}
-        </span>
+        <div className="flex items-center gap-2">
+          {isWaitingCheckpoint && (
+            <span className="animate-pulse rounded bg-yellow-500/20 px-2 py-0.5 text-xs text-yellow-400">
+              Waiting for checkpoint
+            </span>
+          )}
+          <span className={`rounded px-2 py-0.5 text-xs ${status.bg} ${status.text}`}>
+            {status.label}
+          </span>
+        </div>
       </div>
       <div className="mb-2 truncate text-xs text-slate-400" title={session.workingDir}>
         {session.workingDir}
@@ -48,8 +61,10 @@ export function SessionSlot({ slot, session }: SessionSlotProps) {
           $ {session.currentCommand}
         </div>
       )}
-      {/* Reserve space for terminal (added in 04-03) */}
-      <div className="mt-auto h-48 rounded bg-slate-900" />
+      {/* Terminal takes remaining height */}
+      <div className="min-h-0 flex-1">
+        <Terminal sessionId={session.id} className="h-full" />
+      </div>
     </div>
   );
 }
