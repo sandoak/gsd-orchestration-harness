@@ -137,32 +137,36 @@ export class SessionManager extends EventEmitter<SessionManagerEvents> {
         let commandSent = false;
         let outputBuffer = '';
 
-        // Watch for the prompt character to know Claude is ready
-        const checkForPrompt = (data: string) => {
+        // Watch for Claude Code to be fully ready before sending command
+        // Claude Code shows: prompt (❯), then loads MCP servers, shows status bar
+        // We need to wait for full initialization, not just the prompt
+        const checkForReady = (data: string) => {
           if (commandSent) return;
           outputBuffer += data;
 
-          // Claude Code shows ❯ when ready for input
-          // Look for the prompt at the end of output (not just anywhere)
-          // The prompt appears on its own line after initialization
-          const lines = outputBuffer.split('\n');
-          const lastFewLines = lines.slice(-5).join('\n');
+          // Look for signs that Claude Code is fully initialized:
+          // 1. The prompt character ❯ should be present
+          // 2. MCP status should be shown (indicates connections attempted)
+          // The status bar shows things like "MCP servers" or connection info
+          const hasPrompt = outputBuffer.includes('❯');
+          const hasMcpStatus =
+            outputBuffer.includes('MCP') ||
+            outputBuffer.includes('mcp') ||
+            outputBuffer.includes('bypass permissions');
 
-          // Check for prompt character in recent output
-          // ❯ is Claude Code's prompt, but may have ANSI codes around it
-          if (lastFewLines.includes('❯') || /\n>\s*$/.test(outputBuffer)) {
+          if (hasPrompt && hasMcpStatus) {
             commandSent = true;
-            // Longer delay after prompt appears to ensure Claude is fully ready
-            // 500ms gives time for any final initialization
+            // Wait 2 seconds after full initialization before sending command
+            // This gives Claude Code time to be truly ready for input
             setTimeout(() => {
               // Use \r (carriage return) to submit - PTY expects this, not \n
               ptyProcess.write(commandToRun + '\r');
-            }, 500);
+            }, 2000);
           }
         };
 
-        // Attach temporary listener for prompt detection
-        ptyProcess.onData(checkForPrompt);
+        // Attach temporary listener for ready detection
+        ptyProcess.onData(checkForReady);
 
         // Fallback: If no prompt detected in 10 seconds, send anyway
         setTimeout(() => {
