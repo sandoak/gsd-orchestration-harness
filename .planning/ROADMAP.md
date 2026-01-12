@@ -22,7 +22,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 
 - [x] **Phase 1: Foundation & Core Types** - Monorepo setup with shared types and build configuration (2/2 plans)
 - [x] **Phase 2: Session Management** - Claude CLI process spawning with output capture and persistence (3/3 plans)
-- [ ] **Phase 3: MCP Server** - 6 tools for session control via stdio transport
+- [x] **Phase 3: MCP Server** - 6 tools for session control via stdio transport (3/3 plans)
 - [ ] **Phase 4: Web Dashboard** - Real-time terminal dashboard with xterm.js
 - [ ] **Phase 5: GSD Integration** - State parsing and checkpoint automation
 - [ ] **Phase 6: E2E Integration** - Wire components, testing, and polish
@@ -65,7 +65,7 @@ Plans:
 
 - [x] 03-01: MCP server setup with stdio transport (2026-01-12)
 - [x] 03-02: Session control tools (start, list, end) (2026-01-12)
-- [ ] 03-03: State and checkpoint tools (get_output, get_state, get_checkpoint)
+- [x] 03-03: State and checkpoint tools (get_output, get_state, get_checkpoint) (2026-01-12)
 
 ### Phase 4: Web Dashboard
 
@@ -116,7 +116,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6
 | --------------------- | -------------- | ----------- | ---------- |
 | 1. Foundation         | 2/2            | Complete    | 2026-01-12 |
 | 2. Session Management | 3/3            | Complete    | 2026-01-12 |
-| 3. MCP Server         | 2/3            | In progress | -          |
+| 3. MCP Server         | 3/3            | Complete    | 2026-01-12 |
 | 4. Web Dashboard      | 0/3            | Not started | -          |
 | 5. GSD Integration    | 0/3            | Not started | -          |
 | 6. E2E Integration    | 0/3            | Not started | -          |
