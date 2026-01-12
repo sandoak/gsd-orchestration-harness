@@ -85,6 +85,55 @@ export default [
     },
   },
 
+  // React/Browser files (dashboard package)
+  {
+    files: ['packages/dashboard/**/*.ts', 'packages/dashboard/**/*.tsx'],
+    languageOptions: {
+      parser: tsparser,
+      parserOptions: {
+        ecmaVersion: 'latest',
+        sourceType: 'module',
+        ecmaFeatures: {
+          jsx: true,
+        },
+      },
+      globals: {
+        // Browser globals
+        document: 'readonly',
+        window: 'readonly',
+        navigator: 'readonly',
+        fetch: 'readonly',
+        WebSocket: 'readonly',
+        console: 'readonly',
+        setTimeout: 'readonly',
+        clearTimeout: 'readonly',
+        setInterval: 'readonly',
+        clearInterval: 'readonly',
+        // React 19 JSX transform - React is not needed in scope
+        React: 'readonly',
+      },
+    },
+    plugins: {
+      '@typescript-eslint': tseslint,
+      import: importPlugin,
+    },
+    rules: {
+      ...tseslint.configs.recommended.rules,
+      '@typescript-eslint/explicit-function-return-type': 'off',
+      'import/order': [
+        'error',
+        {
+          groups: ['builtin', 'external', 'internal', 'parent', 'sibling', 'index'],
+          'newlines-between': 'always',
+          alphabetize: {
+            order: 'asc',
+            caseInsensitive: true,
+          },
+        },
+      ],
+    },
+  },
+
   // Prettier must be last
   prettier,
 ];
