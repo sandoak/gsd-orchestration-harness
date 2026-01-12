@@ -107,6 +107,37 @@ export class HarnessServer {
 
       return { success: true, sessionId, cols, rows };
     });
+
+    // GET /api/sessions/:sessionId/output - get session output (for debugging)
+    this.httpServer.app.get<{
+      Params: { sessionId: string };
+      Querystring: { lines?: string };
+    }>('/api/sessions/:sessionId/output', async (request, reply) => {
+      const { sessionId } = request.params;
+      const lines = parseInt(request.query.lines ?? '100', 10);
+
+      const output = this.manager.getOutput(sessionId);
+
+      if (output.length === 0) {
+        // Check if session exists
+        const session = this.manager.getSession(sessionId);
+        if (!session) {
+          return reply.status(404).send({ error: `Session not found: ${sessionId}` });
+        }
+      }
+
+      // Join output and return last N lines
+      const fullOutput = output.join('');
+      const outputLines = fullOutput.split('\n');
+      const lastLines = outputLines.slice(-lines).join('\n');
+
+      return {
+        sessionId,
+        totalLines: outputLines.length,
+        requestedLines: lines,
+        output: lastLines,
+      };
+    });
   }
 
   /**

@@ -143,14 +143,21 @@ export class SessionManager extends EventEmitter<SessionManagerEvents> {
           outputBuffer += data;
 
           // Claude Code shows ❯ when ready for input
-          // Also check for the prompt after MCP connection messages
-          if (outputBuffer.includes('❯') || outputBuffer.includes('>')) {
+          // Look for the prompt at the end of output (not just anywhere)
+          // The prompt appears on its own line after initialization
+          const lines = outputBuffer.split('\n');
+          const lastFewLines = lines.slice(-5).join('\n');
+
+          // Check for prompt character in recent output
+          // ❯ is Claude Code's prompt, but may have ANSI codes around it
+          if (lastFewLines.includes('❯') || /\n>\s*$/.test(outputBuffer)) {
             commandSent = true;
-            // Small delay after prompt appears to ensure it's fully ready
+            // Longer delay after prompt appears to ensure Claude is fully ready
+            // 500ms gives time for any final initialization
             setTimeout(() => {
               // Use \r (carriage return) to submit - PTY expects this, not \n
               ptyProcess.write(commandToRun + '\r');
-            }, 100);
+            }, 500);
           }
         };
 
