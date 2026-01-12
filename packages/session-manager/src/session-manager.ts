@@ -416,7 +416,12 @@ export class SessionManager extends EventEmitter<SessionManagerEvents> {
           menuOptions: waitState.menuOptions,
           trigger: waitState.trigger,
         };
-        this.emit('session:waiting', waitingEvent);
+
+        // Delay event emission by 5 seconds to give orchestrator time to set up listener
+        // This ensures wait_for_state_change is called before the event fires
+        setTimeout(() => {
+          this.emit('session:waiting', waitingEvent);
+        }, 5000);
       }
     }, 300);
   }
@@ -530,6 +535,10 @@ export class SessionManager extends EventEmitter<SessionManagerEvents> {
     if (!managed) {
       return false;
     }
+
+    // Reset wait state so the next checkpoint triggers a new event
+    // This is critical - without this, consecutive menu checkpoints won't fire events
+    managed.lastWaitState = undefined;
 
     // For terminal UI libraries (enquirer, prompts), we need to send
     // input with proper timing to ensure it's processed correctly.
