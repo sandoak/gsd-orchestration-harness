@@ -9,20 +9,20 @@ See: .planning/PROJECT.md (updated 2026-01-11)
 
 ## Current Position
 
-Phase: 2 of 6 (Session Management) — Complete
-Plan: 3 of 3 in current phase
-Status: Phase complete
-Last activity: 2026-01-12 — Completed 02-03-PLAN.md
+Phase: 3 of 6 (MCP Server) — In Progress
+Plan: 1 of 3 in current phase
+Status: Plan complete
+Last activity: 2026-01-12 — Completed 03-01-PLAN.md
 
-Progress: [█████░░░░░] 29%
+Progress: [██████░░░░] 35%
 
 ## Performance Metrics
 
 **Velocity:**
 
-- Total plans completed: 5
+- Total plans completed: 6
 - Average duration: 7 min
-- Total execution time: 33 min
+- Total execution time: 41 min
 
 **By Phase:**
 
@@ -30,10 +30,11 @@ Progress: [█████░░░░░] 29%
 | ----- | ----- | ------ | -------- |
 | 1     | 2     | 8 min  | 4 min    |
 | 2     | 3     | 25 min | 8 min    |
+| 3     | 1     | 8 min  | 8 min    |
 
 **Recent Trend:**
 
-- Last 5 plans: 01-02 (4m), 02-01 (8m), 02-02 (7m), 02-03 (10m)
+- Last 5 plans: 02-01 (8m), 02-02 (7m), 02-03 (10m), 03-01 (8m)
 - Trend: consistent
 
 _Updated after each plan completion_
@@ -58,6 +59,8 @@ Recent decisions affecting current work:
 - [02-02]: WAL mode for better concurrency during dashboard reads
 - [02-03]: Mark orphaned sessions as failed (cannot reconnect to running Claude CLI)
 - [02-03]: recovery:complete event over logging (library consumers handle logging)
+- [03-01]: Use @modelcontextprotocol/sdk subpath imports for ESM compatibility
+- [03-01]: Inject PersistentSessionManager for testability
 
 ### Deferred Issues
 
@@ -74,5 +77,5 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-01-12
-Stopped at: Completed 02-03-PLAN.md (Phase 2 complete)
+Stopped at: Completed 03-01-PLAN.md
 Resume file: None

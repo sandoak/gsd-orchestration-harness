@@ -63,7 +63,7 @@ Plans:
 
 Plans:
 
-- [ ] 03-01: MCP server setup with stdio transport
+- [x] 03-01: MCP server setup with stdio transport (2026-01-12)
 - [ ] 03-02: Session control tools (start, list, end)
 - [ ] 03-03: State and checkpoint tools (get_output, get_state, get_checkpoint)
 
@@ -116,7 +116,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6
 | --------------------- | -------------- | ----------- | ---------- |
 | 1. Foundation         | 2/2            | Complete    | 2026-01-12 |
 | 2. Session Management | 3/3            | Complete    | 2026-01-12 |
-| 3. MCP Server         | 0/3            | Not started | -          |
+| 3. MCP Server         | 1/3            | In progress | -          |
 | 4. Web Dashboard      | 0/3            | Not started | -          |
 | 5. GSD Integration    | 0/3            | Not started | -          |
 | 6. E2E Integration    | 0/3            | Not started | -          |
