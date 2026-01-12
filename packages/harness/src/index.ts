@@ -21,6 +21,14 @@ import { HarnessServer } from '@gsd/web-server';
 const DEFAULT_PORT = 3333;
 
 /**
+ * Environment variable set in child sessions to prevent harness from starting.
+ * When Claude CLI is spawned by the harness, it inherits .mcp.json which includes
+ * gsd-harness. Without this check, the child would try to start another harness
+ * instance, causing port conflicts and failures.
+ */
+const HARNESS_CHILD_ENV = 'GSD_HARNESS_CHILD';
+
+/**
  * Logs a message to stderr to avoid interfering with MCP stdout communication.
  */
 function log(message: string): void {
@@ -32,6 +40,15 @@ function log(message: string): void {
  * Main entry point - creates shared manager and starts both servers.
  */
 async function main(): Promise<void> {
+  // Skip initialization if running as a child session
+  // Child sessions inherit .mcp.json but shouldn't start their own harness
+  if (process.env[HARNESS_CHILD_ENV] === '1') {
+    log('Running as child session - harness disabled (parent harness handles orchestration)');
+    // Exit cleanly - MCP will see this as server unavailable, which is fine
+    // The child Claude session doesn't need harness tools
+    process.exit(0);
+  }
+
   log('Starting GSD Orchestration Harness...');
 
   // Create single shared session manager instance

@@ -113,6 +113,14 @@ export class SessionManager extends EventEmitter<SessionManagerEvents> {
         args.push(...parsedArgs);
       }
 
+      // Build environment for child process
+      // Set GSD_HARNESS_CHILD=1 to prevent child from starting its own harness
+      // (child sessions inherit .mcp.json which includes gsd-harness)
+      const childEnv: Record<string, string> = {
+        ...(process.env as Record<string, string>),
+        GSD_HARNESS_CHILD: '1',
+      };
+
       // Spawn the process using PTY for proper terminal emulation
       // This is required for Claude CLI which needs a terminal
       const ptyProcess = pty.spawn(this.executable, args, {
@@ -120,7 +128,7 @@ export class SessionManager extends EventEmitter<SessionManagerEvents> {
         cols: 120,
         rows: 30,
         cwd: workingDir,
-        env: process.env as Record<string, string>,
+        env: childEnv,
       });
 
       // For Claude CLI: Wait for the prompt before sending the command
