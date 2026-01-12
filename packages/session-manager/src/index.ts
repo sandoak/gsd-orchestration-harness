@@ -1,6 +1,16 @@
 // Session manager exports
 export { SessionManager, type SessionManagerOptions } from './session-manager.js';
 
+// Database exports
+export {
+  DatabaseConnection,
+  getDatabase,
+  closeDatabase,
+  SessionStore,
+  OutputStore,
+  type SessionUpdateFields,
+} from './db/index.js';
+
 // Re-export relevant types from @gsd/core
 export type {
   Session,
