@@ -117,3 +117,4 @@ packages/*/.turbo/
 *.pid
 *.seed
 *.pid.lock
+.playwright-mcp/
