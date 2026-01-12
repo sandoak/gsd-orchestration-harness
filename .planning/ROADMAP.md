@@ -21,7 +21,7 @@ Or: None (using established patterns)
 Decimal phases appear between their surrounding integers in numeric order.
 
 - [x] **Phase 1: Foundation & Core Types** - Monorepo setup with shared types and build configuration (2/2 plans)
-- [ ] **Phase 2: Session Management** - Claude CLI process spawning with output capture and persistence
+- [ ] **Phase 2: Session Management** - Claude CLI process spawning with output capture and persistence (1/3 plans)
 - [ ] **Phase 3: MCP Server** - 6 tools for session control via stdio transport
 - [ ] **Phase 4: Web Dashboard** - Real-time terminal dashboard with xterm.js
 - [ ] **Phase 5: GSD Integration** - State parsing and checkpoint automation
@@ -50,7 +50,7 @@ Plans:
 
 Plans:
 
-- [ ] 02-01: Claude process spawning and lifecycle management
+- [x] 02-01: Claude process spawning and lifecycle management (2026-01-12)
 - [ ] 02-02: SQLite persistence with better-sqlite3
 - [ ] 02-03: Session recovery after harness restart
 
@@ -115,7 +115,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6
 | Phase                 | Plans Complete | Status      | Completed  |
 | --------------------- | -------------- | ----------- | ---------- |
 | 1. Foundation         | 2/2            | Complete    | 2026-01-12 |
-| 2. Session Management | 0/3            | Not started | -          |
+| 2. Session Management | 1/3            | In progress | -          |
 | 3. MCP Server         | 0/3            | Not started | -          |
 | 4. Web Dashboard      | 0/3            | Not started | -          |
 | 5. GSD Integration    | 0/3            | Not started | -          |
