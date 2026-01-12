@@ -13,8 +13,7 @@
   "scripts": {
     "build": "tsc",
     "dev": "tsc --watch",
-    "type-check": "tsc --noEmit",
-    "test": "vitest run"
+    "type-check": "tsc --noEmit"
   },
   "dependencies": {
     "@gsd/core": "workspace:*",
