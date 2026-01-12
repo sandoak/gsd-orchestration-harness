@@ -1,6 +1,7 @@
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 
+import { GsdStateParser } from '@gsd/core';
 import type { PersistentSessionManager } from '@gsd/session-manager';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
@@ -13,55 +14,10 @@ const getStateSchema = {
 };
 
 /**
- * Basic GSD state extracted from STATE.md.
- * Phase 5 will enhance with full parsing.
- */
-interface BasicGsdState {
-  currentPhase: number;
-  currentPlan: number;
-  status: string;
-  progress: string;
-  hasCheckpoint: boolean;
-}
-
-/**
- * Extracts basic GSD state from STATE.md content using regex.
- */
-function parseStateFile(content: string): Partial<BasicGsdState> {
-  const result: Partial<BasicGsdState> = {};
-
-  // Extract phase number from "Phase: X of Y"
-  const phaseMatch = content.match(/Phase:\s*(\d+)\s*of\s*\d+/i);
-  if (phaseMatch?.[1]) {
-    result.currentPhase = parseInt(phaseMatch[1], 10);
-  }
-
-  // Extract plan number from "Plan: X of Y"
-  const planMatch = content.match(/Plan:\s*(\d+)\s*of\s*\d+/i);
-  if (planMatch?.[1]) {
-    result.currentPlan = parseInt(planMatch[1], 10);
-  }
-
-  // Extract status from "Status:" line
-  const statusMatch = content.match(/Status:\s*([^\n]+)/i);
-  if (statusMatch?.[1]) {
-    result.status = statusMatch[1].trim();
-  }
-
-  // Extract progress percentage if present (e.g., "[███████░░░] 41%")
-  const progressMatch = content.match(/(\[\S+\]\s*\d+%)/);
-  if (progressMatch) {
-    result.progress = progressMatch[1];
-  }
-
-  return result;
-}
-
-/**
  * Registers the gsd_get_state tool with the MCP server.
  *
- * This tool reads GSD state from the session's working directory.
- * Basic regex-based extraction for MVP; Phase 5 adds full parsing.
+ * This tool reads GSD state from the session's working directory using
+ * GsdStateParser to extract comprehensive project state from .planning/ files.
  *
  * @param server - The MCP server instance
  * @param manager - The PersistentSessionManager instance
@@ -85,7 +41,6 @@ export function registerGetStateTool(server: McpServer, manager: PersistentSessi
     }
 
     const planningDir = join(session.workingDir, '.planning');
-    const stateFile = join(planningDir, 'STATE.md');
 
     // Check if GSD project exists
     if (!existsSync(planningDir)) {
@@ -103,23 +58,11 @@ export function registerGetStateTool(server: McpServer, manager: PersistentSessi
     }
 
     try {
-      // Read and parse STATE.md
-      let state: Partial<BasicGsdState> = {};
-      if (existsSync(stateFile)) {
-        const stateContent = readFileSync(stateFile, 'utf-8');
-        state = parseStateFile(stateContent);
-      }
+      // Parse state using GsdStateParser
+      const parsedState = GsdStateParser.parseFromDirectory(session.workingDir);
 
-      // Check session status for checkpoint
-      const hasCheckpoint = session.status === 'waiting_checkpoint';
-
-      const gsdState: BasicGsdState = {
-        currentPhase: state.currentPhase ?? 0,
-        currentPlan: state.currentPlan ?? 0,
-        status: state.status ?? 'unknown',
-        progress: state.progress ?? '',
-        hasCheckpoint,
-      };
+      // Override hasCheckpoint with session status (more accurate for runtime)
+      const hasCheckpoint = session.status === 'waiting_checkpoint' || parsedState.hasCheckpoint;
 
       return {
         content: [
@@ -129,7 +72,21 @@ export function registerGetStateTool(server: McpServer, manager: PersistentSessi
               success: true,
               sessionId,
               workingDir: session.workingDir,
-              state: gsdState,
+              state: {
+                projectName: parsedState.projectName,
+                currentPhase: parsedState.currentPhase,
+                currentPlan: parsedState.currentPlan,
+                status: parsedState.status,
+                progress: parsedState.progress,
+                totalPhases: parsedState.totalPhases,
+                plansInCurrentPhase: parsedState.plansInCurrentPhase,
+                phases: parsedState.phases,
+                hasCheckpoint,
+                decisions: parsedState.decisions,
+                deferredIssues: parsedState.deferredIssues,
+                currentPlanTasks: parsedState.currentPlanTasks,
+                currentPlanHasCheckpoints: parsedState.currentPlanHasCheckpoints,
+              },
             }),
           },
         ],
