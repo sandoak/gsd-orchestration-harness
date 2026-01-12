@@ -1,0 +1,14 @@
+echo "Running pre-commit hooks..."
+
+# Run lint-staged (handles linting, formatting, and context size checks)
+npx lint-staged
+
+# Check for .env file
+if git diff --cached --name-only | grep -E '^\.env$' > /dev/null 2>&1; then
+  echo "ERROR: Attempting to commit .env file"
+  echo ".env contains secrets and should never be committed"
+  echo "Use .env.example instead"
+  exit 1
+fi
+
+echo "Pre-commit checks passed!"

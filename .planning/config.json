@@ -1,0 +1,13 @@
+{
+  "mode": "yolo",
+  "depth": "comprehensive",
+  "project": {
+    "name": "GSD Session Harness",
+    "created": "2026-01-11"
+  },
+  "settings": {
+    "autoCommit": true,
+    "confirmCheckpoints": false,
+    "parallelPlanning": true
+  }
+}

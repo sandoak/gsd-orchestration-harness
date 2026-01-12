@@ -1,0 +1,24 @@
+{
+  "mcpServers": {
+    "mcp-sandbox": {
+      "type": "http",
+      "url": "http://192.168.50.121:3000/mcp"
+    },
+    "playwright": {
+      "command": "npx",
+      "args": ["-y", "@playwright/mcp@latest"]
+    },
+    "shadcn": {
+      "command": "npx",
+      "args": ["shadcn@latest", "mcp"]
+    },
+    "shadcn-studio-mcp": {
+      "command": "npx",
+      "args": ["-y", "shadcn-studio-mcp"],
+      "env": {
+        "API_KEY": "4ADDD673-2F5D-45D1-AC48-9E67E62CBBEC",
+        "EMAIL": "sandoakholdings@gmail.com"
+      }
+    }
+  }
+}

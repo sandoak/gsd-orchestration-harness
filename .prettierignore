@@ -1,0 +1,37 @@
+# Dependencies
+node_modules/
+
+# Build outputs
+dist/
+build/
+out/
+.next/
+.nuxt/
+
+# Coverage
+coverage/
+
+# Minified files
+*.min.js
+*.min.css
+
+# Lock files (auto-generated)
+package-lock.json
+pnpm-lock.yaml
+yarn.lock
+
+# Cache
+.cache/
+.turbo/
+
+# IDE
+.idea/
+.vscode/
+
+# Logs
+*.log
+
+# Environment (should not be committed anyway)
+.env
+.env.*
+!.env.example
