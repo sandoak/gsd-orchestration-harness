@@ -18,7 +18,7 @@ function App() {
           <span className="text-sm text-slate-400">{connected ? 'Connected' : 'Disconnected'}</span>
         </div>
       </header>
-      <main className="min-h-0 flex-1 p-6">
+      <main className="min-h-0 flex-1 overflow-hidden p-4">
         <SessionPanel />
       </main>
     </div>

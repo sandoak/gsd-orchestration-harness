@@ -20,12 +20,12 @@ export function SessionSlot({ slot, session }: SessionSlotProps) {
 
   if (!session) {
     return (
-      <div className="flex h-full flex-col rounded-lg border-2 border-dashed border-slate-600 bg-slate-800/50 p-4">
-        <div className="mb-2 flex items-center justify-between">
+      <div className="flex h-full min-h-[200px] flex-col overflow-hidden rounded-lg border-2 border-dashed border-slate-600 bg-slate-800/50 p-4">
+        <div className="mb-2 flex shrink-0 items-center justify-between">
           <span className="text-sm font-medium text-slate-400">Slot {slot}</span>
           <span className="rounded bg-slate-700 px-2 py-0.5 text-xs text-slate-400">Empty</span>
         </div>
-        <div className="flex flex-1 items-center justify-center rounded bg-slate-900/50 text-slate-500">
+        <div className="flex min-h-0 flex-1 items-center justify-center rounded bg-slate-900/50 text-slate-500">
           <span className="text-sm">No active session</span>
         </div>
       </div>
@@ -36,11 +36,11 @@ export function SessionSlot({ slot, session }: SessionSlotProps) {
 
   return (
     <div
-      className={`flex h-full flex-col rounded-lg border bg-slate-800 p-4 ${
+      className={`flex h-full min-h-[200px] flex-col overflow-hidden rounded-lg border bg-slate-800 p-4 ${
         isWaitingCheckpoint ? 'border-2 border-yellow-500' : 'border-slate-600'
       }`}
     >
-      <div className="mb-2 flex items-center justify-between">
+      <div className="mb-2 flex shrink-0 items-center justify-between">
         <span className="text-sm font-medium text-slate-300">Slot {slot}</span>
         <div className="flex items-center gap-2">
           {isWaitingCheckpoint && (
@@ -53,16 +53,19 @@ export function SessionSlot({ slot, session }: SessionSlotProps) {
           </span>
         </div>
       </div>
-      <div className="mb-2 truncate text-xs text-slate-400" title={session.workingDir}>
+      <div className="mb-2 shrink-0 truncate text-xs text-slate-400" title={session.workingDir}>
         {session.workingDir}
       </div>
       {session.currentCommand && (
-        <div className="mb-2 truncate text-xs text-slate-500" title={session.currentCommand}>
+        <div
+          className="mb-2 shrink-0 truncate text-xs text-slate-500"
+          title={session.currentCommand}
+        >
           $ {session.currentCommand}
         </div>
       )}
       {/* Terminal takes remaining height */}
-      <div className="min-h-0 flex-1">
+      <div className="min-h-0 flex-1 overflow-hidden">
         <Terminal sessionId={session.id} className="h-full" />
       </div>
     </div>
