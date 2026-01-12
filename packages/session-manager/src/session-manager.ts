@@ -351,11 +351,24 @@ export class SessionManager extends EventEmitter<SessionManagerEvents> {
       return { type: 'continue', trigger: continueMatch[0] };
     }
 
-    // Regular prompt detection: ❯ at end of output (Claude prompt)
-    // Only detect if it's the last thing and there's no active spinner
-    const hasSpinner = stripped.match(/[✶✻✽✢·*]/);
-    const hasPrompt = stripped.match(/❯\s*$/);
-    if (hasPrompt && !hasSpinner) {
+    // Regular prompt detection: ❯ at end of line (Claude prompt)
+    // Check the last few lines for prompt - it may not be at the very end
+    // Only skip if there's an active spinner in the last chunk
+    const lines = stripped.split('\n').slice(-5); // Last 5 lines
+    const lastChunk = lines.join('\n');
+    const hasSpinner = lastChunk.match(/[✶✻✽✢]/); // Active spinner chars (not · or *)
+    // Match ❯ at end of line
+    const promptMatch = lastChunk.match(/❯\s*$/m);
+
+    // Debug logging for prompt detection
+    if (lastChunk.includes('❯')) {
+      // eslint-disable-next-line no-console
+      console.log(
+        `[wait-detect] Found ❯ in output. hasSpinner=${!!hasSpinner}, promptMatch=${!!promptMatch}`
+      );
+    }
+
+    if (promptMatch && !hasSpinner) {
       return { type: 'prompt', trigger: '❯' };
     }
 
