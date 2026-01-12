@@ -1,4 +1,9 @@
+import { existsSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+
 import cors from '@fastify/cors';
+import fastifyStatic from '@fastify/static';
 import Fastify, { type FastifyInstance } from 'fastify';
 
 export interface FastifyServerOptions {
@@ -13,6 +18,12 @@ export interface FastifyServerOptions {
    * @default '0.0.0.0'
    */
   host?: string;
+
+  /**
+   * Path to dashboard static files directory.
+   * If not provided, attempts to find dashboard dist relative to this package.
+   */
+  dashboardPath?: string;
 }
 
 /**
@@ -25,11 +36,13 @@ export class FastifyServer {
   readonly app: FastifyInstance;
   private readonly port: number;
   private readonly host: string;
+  private readonly dashboardPath: string | null;
   private isRunning = false;
 
   constructor(options?: FastifyServerOptions) {
     this.port = options?.port ?? 3333;
     this.host = options?.host ?? '0.0.0.0';
+    this.dashboardPath = this.resolveDashboardPath(options?.dashboardPath);
 
     this.app = Fastify({
       logger: false, // Disable logging for library use
@@ -40,13 +53,58 @@ export class FastifyServer {
   }
 
   /**
-   * Registers core plugins (CORS).
+   * Resolves the path to dashboard static files.
+   * Returns null if dashboard is not found.
+   */
+  private resolveDashboardPath(providedPath?: string): string | null {
+    // Use provided path if given
+    if (providedPath && existsSync(providedPath)) {
+      return providedPath;
+    }
+
+    // Try to find dashboard relative to this package
+    // packages/web-server/dist/http-server.js -> packages/dashboard/dist
+    const __filename = fileURLToPath(import.meta.url);
+    const __dirname = dirname(__filename);
+    const relativeToWebServer = join(__dirname, '..', '..', 'dashboard', 'dist');
+
+    if (existsSync(relativeToWebServer)) {
+      return relativeToWebServer;
+    }
+
+    // Try from monorepo root (when running from packages/harness)
+    const relativeToHarness = join(__dirname, '..', '..', '..', 'dashboard', 'dist');
+
+    if (existsSync(relativeToHarness)) {
+      return relativeToHarness;
+    }
+
+    return null;
+  }
+
+  /**
+   * Registers core plugins (CORS, static files).
    */
   private registerPlugins(): void {
     // Register CORS for browser access
     void this.app.register(cors, {
       origin: true, // Allow all origins for local development
     });
+
+    // Register static file serving for dashboard if available
+    if (this.dashboardPath) {
+      void this.app.register(fastifyStatic, {
+        root: this.dashboardPath,
+        prefix: '/',
+        // Serve index.html for SPA routes
+        wildcard: false,
+      });
+
+      // Fallback to index.html for SPA client-side routing
+      this.app.setNotFoundHandler(async (_request, reply) => {
+        return reply.sendFile('index.html');
+      });
+    }
   }
 
   /**
@@ -106,5 +164,12 @@ export class FastifyServer {
    */
   get running(): boolean {
     return this.isRunning;
+  }
+
+  /**
+   * Returns whether the dashboard is being served.
+   */
+  get servingDashboard(): boolean {
+    return this.dashboardPath !== null;
   }
 }

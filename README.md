@@ -103,18 +103,23 @@ See `mcp-config.json.example` for a complete example configuration.
 
 The web dashboard provides real-time session monitoring:
 
-- **URL**: http://localhost:3333
+- **URL**: http://localhost:3333 (same as API)
 - **Features**:
   - 3 session slots displayed simultaneously
   - xterm.js terminals with full ANSI color support
   - Real-time WebSocket updates
   - Session state indicators (running, waiting checkpoint, completed, failed)
 
+The dashboard is served automatically by the harness - no separate server needed.
+
 ## Development
 
 ```bash
 # Watch mode (rebuilds on changes)
 pnpm dev
+
+# Dashboard dev server with hot reload (port 5173)
+cd packages/dashboard && pnpm dev
 
 # Run tests
 pnpm test
