@@ -1,5 +1,5 @@
-import { CHECKPOINT_PATTERNS } from '@gsd/core';
-import type { CheckpointType } from '@gsd/core';
+import { CHECKPOINT_PATTERNS, CheckpointParser } from '@gsd/core';
+import type { CheckpointType, CheckpointInfo } from '@gsd/core';
 import type { PersistentSessionManager } from '@gsd/session-manager';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
@@ -12,14 +12,28 @@ const getCheckpointSchema = {
 };
 
 /**
- * Basic checkpoint info extracted from output.
- * Phase 5 will enhance with full XML parsing.
+ * Response structure when no checkpoint is detected.
  */
-interface BasicCheckpointInfo {
-  hasCheckpoint: boolean;
-  type?: CheckpointType;
-  rawContent?: string;
+interface NoCheckpointResponse {
+  hasCheckpoint: false;
 }
+
+/**
+ * Response structure when a checkpoint is detected but type is unknown.
+ */
+interface UnknownCheckpointResponse {
+  hasCheckpoint: true;
+  type: undefined;
+  rawContent: string;
+}
+
+/**
+ * Full checkpoint response with parsed info.
+ */
+type CheckpointResponse =
+  | NoCheckpointResponse
+  | UnknownCheckpointResponse
+  | (CheckpointInfo & { hasCheckpoint: true; rawContent?: string });
 
 /**
  * Detects checkpoint type from output using CHECKPOINT_PATTERNS.
@@ -65,8 +79,8 @@ function extractCheckpointContent(output: string): string | undefined {
 /**
  * Registers the gsd_get_checkpoint tool with the MCP server.
  *
- * This tool detects if a session is at a checkpoint and extracts basic info.
- * Uses regex pattern matching; Phase 5 adds full XML parsing.
+ * This tool detects if a session is at a checkpoint and returns parsed
+ * CheckpointInfo with typed fields for each checkpoint type.
  *
  * @param server - The MCP server instance
  * @param manager - The PersistentSessionManager instance
@@ -94,6 +108,7 @@ export function registerGetCheckpointTool(
 
     // Check session status first
     if (session.status !== 'waiting_checkpoint') {
+      const response: CheckpointResponse = { hasCheckpoint: false };
       return {
         content: [
           {
@@ -101,9 +116,7 @@ export function registerGetCheckpointTool(
             text: JSON.stringify({
               success: true,
               sessionId,
-              checkpoint: {
-                hasCheckpoint: false,
-              } satisfies BasicCheckpointInfo,
+              checkpoint: response,
             }),
           },
         ],
@@ -120,34 +133,23 @@ export function registerGetCheckpointTool(
       const recentOutput = lines.slice(-50).join('\n');
 
       // Detect checkpoint type
-      const checkpointType = detectCheckpointType(recentOutput);
+      let checkpointType = detectCheckpointType(recentOutput);
+      let rawContent = extractCheckpointContent(recentOutput);
 
+      // If not found in recent output, try full output
       if (!checkpointType) {
-        // Session says waiting but no checkpoint pattern found
-        // This might happen if the checkpoint is in earlier output
-        const fullCheckpointType = detectCheckpointType(fullOutput);
+        checkpointType = detectCheckpointType(fullOutput);
+        rawContent = extractCheckpointContent(fullOutput);
+      }
 
-        if (fullCheckpointType) {
-          const rawContent = extractCheckpointContent(fullOutput);
-          return {
-            content: [
-              {
-                type: 'text',
-                text: JSON.stringify({
-                  success: true,
-                  sessionId,
-                  checkpoint: {
-                    hasCheckpoint: true,
-                    type: fullCheckpointType,
-                    rawContent,
-                  } satisfies BasicCheckpointInfo,
-                }),
-              },
-            ],
-          };
-        }
-
+      // If still no checkpoint type found
+      if (!checkpointType) {
         // Status says waiting but no checkpoint pattern anywhere
+        const response: UnknownCheckpointResponse = {
+          hasCheckpoint: true,
+          type: undefined,
+          rawContent: rawContent ?? 'Checkpoint detected but type unknown',
+        };
         return {
           content: [
             {
@@ -155,20 +157,53 @@ export function registerGetCheckpointTool(
               text: JSON.stringify({
                 success: true,
                 sessionId,
-                checkpoint: {
-                  hasCheckpoint: true,
-                  type: undefined,
-                  rawContent: 'Checkpoint detected but type unknown',
-                } satisfies BasicCheckpointInfo,
+                checkpoint: response,
               }),
             },
           ],
         };
       }
 
-      // Extract checkpoint content
-      const rawContent =
-        extractCheckpointContent(recentOutput) ?? extractCheckpointContent(fullOutput);
+      // Parse the checkpoint content
+      const parsedCheckpoint = rawContent
+        ? CheckpointParser.parse(rawContent, checkpointType, sessionId)
+        : undefined;
+
+      // Build response with parsed checkpoint or fallback to raw content
+      let response: CheckpointResponse;
+      if (parsedCheckpoint) {
+        response = {
+          ...parsedCheckpoint,
+          hasCheckpoint: true,
+          rawContent, // Include raw content as fallback
+        };
+      } else {
+        // Parsing failed, return raw content with detected type
+        response = {
+          hasCheckpoint: true,
+          type: checkpointType,
+          sessionId,
+          detectedAt: new Date(),
+          rawContent: rawContent ?? 'Checkpoint content not extracted',
+          // Type-specific fallbacks based on checkpoint type
+          ...(checkpointType === 'human-verify' && {
+            whatBuilt: 'Unable to parse',
+            howToVerify: ['Unable to parse verification steps'],
+            resumeSignal: 'Type "approved" to continue',
+          }),
+          ...(checkpointType === 'decision' && {
+            decision: 'Unable to parse',
+            context: '',
+            options: [{ id: 'unknown', name: 'Unable to parse', pros: '', cons: '' }],
+            resumeSignal: 'Select an option',
+          }),
+          ...(checkpointType === 'human-action' && {
+            action: 'Unable to parse',
+            instructions: rawContent ?? '',
+            resumeSignal: 'Type "done" when complete',
+          }),
+        } as CheckpointResponse;
+      }
 
       return {
         content: [
@@ -177,11 +212,7 @@ export function registerGetCheckpointTool(
             text: JSON.stringify({
               success: true,
               sessionId,
-              checkpoint: {
-                hasCheckpoint: true,
-                type: checkpointType,
-                rawContent,
-              } satisfies BasicCheckpointInfo,
+              checkpoint: response,
             }),
           },
         ],
