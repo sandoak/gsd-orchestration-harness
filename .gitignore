@@ -16,6 +16,7 @@ node_modules/
 # Build Output
 # ================================
 dist/
+packages/*/dist/
 build/
 out/
 .next/
@@ -95,6 +96,7 @@ temp/
 # ================================
 .cache/
 .turbo/
+packages/*/.turbo/
 .eslintcache
 .prettiercache
 
