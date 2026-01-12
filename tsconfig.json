@@ -14,5 +14,5 @@
   },
   "include": ["src/**/*"],
   "exclude": ["node_modules", "dist", "packages", "**/*.test.ts", "**/*.spec.ts"],
-  "references": []
+  "references": [{ "path": "./packages/core" }]
 }
