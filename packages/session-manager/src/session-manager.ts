@@ -148,7 +148,8 @@ export class SessionManager extends EventEmitter<SessionManagerEvents> {
             commandSent = true;
             // Small delay after prompt appears to ensure it's fully ready
             setTimeout(() => {
-              ptyProcess.write(commandToRun + '\n');
+              // Use \r (carriage return) to submit - PTY expects this, not \n
+              ptyProcess.write(commandToRun + '\r');
             }, 100);
           }
         };
@@ -160,7 +161,7 @@ export class SessionManager extends EventEmitter<SessionManagerEvents> {
         setTimeout(() => {
           if (!commandSent) {
             commandSent = true;
-            ptyProcess.write(commandToRun + '\n');
+            ptyProcess.write(commandToRun + '\r');
           }
         }, 10000);
       }
