@@ -167,6 +167,60 @@ The harness detects three checkpoint types:
 
 Use `gsd_get_checkpoint` to inspect checkpoint details and `gsd_respond_checkpoint` to continue.
 
+## Orchestration Mode
+
+The harness enables Claude to orchestrate multiple GSD sessions in parallel using the `/gsd:orchestrate` command.
+
+### How It Works
+
+1. **Check Harness**: Verify MCP tools are available via `gsd_list_sessions`
+2. **Build Work Queue**: Load ROADMAP.md to identify phases/plans to execute
+3. **Assign Work**: Start sessions in idle slots with `gsd_start_session`
+4. **Monitor Progress**: Poll running sessions for completion or checkpoints
+5. **Handle Checkpoints**: Respond to checkpoints via `gsd_respond_checkpoint`
+6. **Assign Next Work**: As slots complete, assign remaining plans
+7. **Report Completion**: Update STATE.md and report final status
+
+### Example Orchestration Flow
+
+```
+Slot 0: running  → Phase 2 Plan 1
+Slot 1: running  → Phase 2 Plan 2
+Slot 2: idle     → (waiting for work)
+
+[Slot 0 completes]
+Slot 0: idle     → Assigning Phase 2 Plan 3...
+Slot 1: running  → Phase 2 Plan 2
+Slot 2: idle     → (no more parallel-safe work)
+
+[Slot 1 hits checkpoint]
+Slot 0: running  → Phase 2 Plan 3
+Slot 1: waiting  → CHECKPOINT: decision needed
+Slot 2: idle
+
+[Orchestrator handles checkpoint]
+gsd_get_checkpoint("slot-1") → decision options
+gsd_respond_checkpoint("slot-1", "option-a")
+Slot 1: running  → continuing...
+```
+
+### Usage
+
+```bash
+# In your project directory
+/gsd:orchestrate
+```
+
+The orchestrator Claude:
+
+- Acts as session coordinator
+- Assigns work based on ROADMAP dependencies
+- Handles checkpoints (auto-approve human-verify when possible)
+- Surfaces decisions and manual actions to user
+- Tracks overall progress across all sessions
+
+See `.claude/get-shit-done/workflows/orchestrate.md` for full workflow details.
+
 ## Requirements
 
 - Node.js >=22.0.0 <25.0.0

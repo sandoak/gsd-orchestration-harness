@@ -389,3 +389,133 @@ On harness restart:
 | 3 session slots     | Balance parallelism vs. complexity  |
 | stdio MCP transport | Standard Claude Code integration    |
 | Node.js >=22 <25    | Modern features, avoid v25 glob bug |
+
+## Orchestration Flow
+
+The `/gsd:orchestrate` command enables Claude to act as an orchestrator, managing multiple GSD sessions in parallel.
+
+### Orchestration Architecture
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                        ORCHESTRATOR CLAUDE                                   │
+│                                                                              │
+│  ┌──────────────┐   ┌──────────────┐   ┌──────────────┐                     │
+│  │ Work Queue   │   │ Slot Monitor │   │  Checkpoint  │                     │
+│  │              │   │              │   │   Handler    │                     │
+│  │ - 02-01-PLAN │   │ Poll every   │   │              │                     │
+│  │ - 02-02-PLAN │   │ 10-30 sec    │   │ human-verify │                     │
+│  │ - 03-01-PLAN │   │              │   │ decision     │                     │
+│  └──────────────┘   └──────────────┘   │ human-action │                     │
+│         │                  │           └──────────────┘                     │
+│         │                  │                  │                              │
+│         └──────────────────┼──────────────────┘                              │
+│                            │                                                 │
+│                            ▼                                                 │
+│                     ┌─────────────┐                                          │
+│                     │ MCP Tools   │                                          │
+│                     │ (gsd_*)     │                                          │
+│                     └──────┬──────┘                                          │
+│                            │                                                 │
+└────────────────────────────┼─────────────────────────────────────────────────┘
+                             │
+                             ▼
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                         GSD SESSION HARNESS                                  │
+│                                                                              │
+│  ┌─────────────────┐  ┌─────────────────┐  ┌─────────────────┐              │
+│  │   Session 1     │  │   Session 2     │  │   Session 3     │              │
+│  │   /gsd:exec     │  │   /gsd:exec     │  │    (idle)       │              │
+│  │   02-01-PLAN    │  │   02-02-PLAN    │  │                 │              │
+│  └─────────────────┘  └─────────────────┘  └─────────────────┘              │
+│                                                                              │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+### Coordination Pattern
+
+The orchestrator follows a monitor → assign → checkpoint → continue pattern:
+
+```
+1. MONITOR
+   gsd_list_sessions() → Get all slot states
+
+   For each slot:
+   - idle: Candidate for work assignment
+   - running: Continue monitoring
+   - waiting_checkpoint: Handle checkpoint
+   - completed/failed: Process result
+
+2. ASSIGN
+   If idle slots and work queue not empty:
+
+   gsd_start_session(projectPath, "/gsd:execute-plan ...")
+
+   Respect dependencies:
+   - Don't start Phase N until Phase N-1 complete
+   - Plans within a phase may be parallelizable
+
+3. CHECKPOINT
+   When slot enters waiting_checkpoint:
+
+   gsd_get_checkpoint(sessionId) → Get details
+
+   Based on type:
+   - human-verify: Auto-approve if verification passes
+   - decision: Present to user, wait for choice
+   - human-action: Alert user, wait for "done"
+
+   gsd_respond_checkpoint(sessionId, response)
+
+4. CONTINUE
+   After checkpoint handled, slot returns to running
+   Continue monitoring loop
+```
+
+### Parallel Execution Strategy
+
+The orchestrator manages parallel work while respecting dependencies:
+
+```
+Phase Dependencies:
+  Phase 1 ──────────────► Phase 2 ──────────────► Phase 3
+                              │
+                              ├── Plan 2-01
+                              ├── Plan 2-02 (can run parallel to 2-01)
+                              └── Plan 2-03 (depends on 2-01, 2-02)
+
+Slot Assignment:
+  Slot 0 ◄─── Plan 2-01
+  Slot 1 ◄─── Plan 2-02  (parallel)
+  Slot 2 ◄─── (waiting for 2-01, 2-02 to complete before 2-03)
+```
+
+### Checkpoint Aggregation
+
+When multiple slots hit checkpoints simultaneously:
+
+```
+Slot 0: waiting_checkpoint (human-verify)
+Slot 1: waiting_checkpoint (decision)
+Slot 2: running
+
+Orchestrator handling order:
+1. human-verify first (can often auto-approve)
+2. decision next (needs user input)
+3. human-action last (rare, blocks user)
+```
+
+### Error Recovery
+
+When a session fails:
+
+```
+gsd_get_output(sessionId, lines=100) → Get error context
+
+Options:
+1. Retry: gsd_end_session() + gsd_start_session() with same plan
+2. Skip: gsd_end_session(), remove from queue, continue
+3. Investigate: Surface to user for debugging
+
+Failed sessions don't block other slots unless dependencies exist.
+```
