@@ -2,7 +2,7 @@ import { FitAddon } from '@xterm/addon-fit';
 import { WebLinksAddon } from '@xterm/addon-web-links';
 import { Terminal as XTerm } from '@xterm/xterm';
 import '@xterm/xterm/css/xterm.css';
-import { forwardRef, useEffect, useImperativeHandle, useRef } from 'react';
+import { forwardRef, useCallback, useEffect, useImperativeHandle, useRef } from 'react';
 
 import { useSessionOutput } from '../hooks/use-session-output';
 
@@ -26,6 +26,24 @@ export const Terminal = forwardRef<TerminalHandle, TerminalProps>(
 
     // Subscribe to session output from the store
     const { output } = useSessionOutput(sessionId);
+
+    // Safe fit function that checks dimensions and catches errors
+    const safeFit = useCallback(() => {
+      const container = containerRef.current;
+      const fitAddon = fitAddonRef.current;
+
+      if (!container || !fitAddon) return;
+
+      // Check that container has non-zero dimensions before fitting
+      const { clientWidth, clientHeight } = container;
+      if (clientWidth === 0 || clientHeight === 0) return;
+
+      try {
+        fitAddon.fit();
+      } catch {
+        // Silently ignore fit errors - container may not be ready yet
+      }
+    }, []);
 
     // Expose terminal methods to parent
     useImperativeHandle(ref, () => ({
@@ -87,16 +105,18 @@ export const Terminal = forwardRef<TerminalHandle, TerminalProps>(
       // Open terminal in container
       terminal.open(containerRef.current);
 
-      // Fit terminal to container
-      fitAddon.fit();
-
-      // Store references
+      // Store references first so safeFit can use them
       terminalRef.current = terminal;
       fitAddonRef.current = fitAddon;
 
+      // Fit terminal to container (deferred to ensure layout is complete)
+      window.requestAnimationFrame(() => {
+        safeFit();
+      });
+
       // Handle window resize
       const handleResize = () => {
-        fitAddon.fit();
+        safeFit();
       };
       window.addEventListener('resize', handleResize);
 
@@ -107,12 +127,12 @@ export const Terminal = forwardRef<TerminalHandle, TerminalProps>(
         terminalRef.current = null;
         fitAddonRef.current = null;
       };
-    }, []);
+    }, [safeFit]);
 
     // Re-fit when container might have changed size
     useEffect(() => {
       const observer = new ResizeObserver(() => {
-        fitAddonRef.current?.fit();
+        safeFit();
       });
 
       if (containerRef.current) {
@@ -122,7 +142,7 @@ export const Terminal = forwardRef<TerminalHandle, TerminalProps>(
       return () => {
         observer.disconnect();
       };
-    }, []);
+    }, [safeFit]);
 
     // Write new output lines when output array grows
     useEffect(() => {

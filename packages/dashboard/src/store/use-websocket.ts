@@ -12,7 +12,10 @@ export function useWebSocket() {
   const reconnectTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const reconnectDelayRef = useRef(INITIAL_RECONNECT_DELAY);
 
-  const { setConnected, handleEvent, handleInitialState } = useSessionStore();
+  // Use stable selectors to avoid infinite re-renders
+  const setConnected = useSessionStore((state) => state.setConnected);
+  const handleEvent = useSessionStore((state) => state.handleEvent);
+  const handleInitialState = useSessionStore((state) => state.handleInitialState);
 
   useEffect(() => {
     const connect = () => {

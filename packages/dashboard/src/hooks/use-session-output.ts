@@ -8,6 +8,9 @@ interface SessionOutputResult {
   lastIndex: number;
 }
 
+// Stable empty array to avoid creating new references
+const EMPTY_OUTPUT: string[] = [];
+
 /**
  * Hook to subscribe to session output from the Zustand store.
  * Tracks the last read index to provide only new lines since last check.
@@ -29,8 +32,8 @@ export function useSessionOutput(sessionId: string): SessionOutputResult {
         }
       });
     },
-    () => useSessionStore.getState().output.get(sessionId) ?? [],
-    () => [] // Server snapshot
+    () => useSessionStore.getState().output.get(sessionId) ?? EMPTY_OUTPUT,
+    () => EMPTY_OUTPUT // Server snapshot - must return stable reference
   );
 
   // Calculate new lines since last index
