@@ -5,7 +5,7 @@
 # Run this script from any project directory to enable harness functionality.
 #
 # Usage:
-#   curl -sSL https://raw.githubusercontent.com/[org]/gsd-orchestration-harness/main/scripts/setup-gsd-harness.sh | bash
+#   curl -sSL https://raw.githubusercontent.com/sandoak/gsd-orchestration-harness/main/scripts/setup-gsd-harness.sh | bash
 #   OR
 #   /path/to/gsd-orchestration-harness/scripts/setup-gsd-harness.sh
 #
@@ -20,7 +20,7 @@ BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
 # Configuration
-HARNESS_REPO="https://github.com/[your-org]/gsd-orchestration-harness.git"
+HARNESS_REPO="https://github.com/sandoak/gsd-orchestration-harness.git"
 HARNESS_DEFAULT_PATH="$HOME/.gsd-harness"
 SHARED_COMMANDS_PATH="/mnt/dev-linux/projects/general-reference/claude-shared-commands-agents-skills"
 MCP_CONFIG_TEMPLATE=".mcp.harness.json"
