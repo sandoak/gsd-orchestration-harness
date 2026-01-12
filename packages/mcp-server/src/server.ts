@@ -2,6 +2,8 @@ import type { PersistentSessionManager } from '@gsd/session-manager';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 
+import { registerStartSessionTool } from './tools/start-session.js';
+
 /**
  * MCP server version - should match package.json.
  */
@@ -38,12 +40,13 @@ export class GsdMcpServer {
 
   /**
    * Register MCP tools.
-   * Placeholder for tool implementations in 03-02 and 03-03.
+   * Session control tools (03-02) and state/output tools (03-03).
    */
   private registerTools(): void {
-    // Tool registrations will be added in subsequent plans:
-    // 03-02: gsd_start_session, gsd_list_sessions, gsd_end_session
-    // 03-03: gsd_get_output, gsd_get_state, gsd_get_checkpoint
+    // 03-02: Session control tools
+    registerStartSessionTool(this.server, this.manager);
+
+    // 03-03: gsd_get_output, gsd_get_state, gsd_get_checkpoint (to be added)
   }
 
   /**
