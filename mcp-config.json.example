@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json.schemastore.org/mcp-servers",
+  "_comment": [
+    "GSD Orchestration Harness MCP Configuration",
+    "",
+    "Prerequisites:",
+    "1. Build the harness first: pnpm build",
+    "2. The web dashboard runs alongside the MCP server",
+    "3. Dashboard URL: http://localhost:3333",
+    "4. WebSocket endpoint: ws://localhost:3333/ws",
+    "",
+    "Copy this configuration to your Claude Code settings."
+  ],
+  "mcpServers": {
+    "gsd-harness": {
+      "command": "node",
+      "args": ["packages/harness/dist/index.js"],
+      "cwd": "/path/to/gsd-orchestration-harness"
+    }
+  }
+}
