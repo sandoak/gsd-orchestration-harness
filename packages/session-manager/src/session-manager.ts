@@ -28,6 +28,15 @@ interface SessionManagerEvents {
   'session:failed': [event: SessionFailedEvent];
 }
 
+export interface SessionManagerOptions {
+  outputBufferSize?: number;
+  /**
+   * Executable to spawn. Defaults to 'claude'.
+   * Can be overridden for testing with simple shell commands.
+   */
+  executable?: string;
+}
+
 /**
  * SessionManager handles Claude CLI process lifecycle.
  * Manages spawning, monitoring, and terminating Claude sessions
@@ -37,10 +46,12 @@ export class SessionManager extends EventEmitter<SessionManagerEvents> {
   private sessions: Map<string, ManagedSession> = new Map();
   private availableSlots: Set<SlotNumber> = new Set(SESSION_SLOTS);
   private outputBufferSize: number;
+  private executable: string;
 
-  constructor(options?: { outputBufferSize?: number }) {
+  constructor(options?: SessionManagerOptions) {
     super();
     this.outputBufferSize = options?.outputBufferSize ?? DEFAULT_OUTPUT_BUFFER_SIZE;
+    this.executable = options?.executable ?? 'claude';
   }
 
   /**
@@ -67,8 +78,8 @@ export class SessionManager extends EventEmitter<SessionManagerEvents> {
     // Build spawn arguments
     const args = commandToRun ? [commandToRun] : [];
 
-    // Spawn the Claude CLI process
-    const childProcess = spawn('claude', args, {
+    // Spawn the process
+    const childProcess = spawn(this.executable, args, {
       cwd: workingDir,
       shell: true,
       stdio: ['pipe', 'pipe', 'pipe'],

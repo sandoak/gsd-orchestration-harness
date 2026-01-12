@@ -1,5 +1,5 @@
 // Session manager exports
-export { SessionManager } from './session-manager.js';
+export { SessionManager, type SessionManagerOptions } from './session-manager.js';
 
 // Re-export relevant types from @gsd/core
 export type {
