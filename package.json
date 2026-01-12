@@ -54,5 +54,10 @@
     "context/**/*.md": [
       "node .husky/check-context-size.cjs"
     ]
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "better-sqlite3"
+    ]
   }
 }
