@@ -99,13 +99,16 @@ export class SessionManager extends EventEmitter<SessionManagerEvents> {
 
       // Build spawn arguments
       // Include --dangerously-skip-permissions for Claude CLI autonomous operation
+      // IMPORTANT: For Claude CLI, do NOT pass command as positional args - that triggers "print mode"
+      // which exits after one response. We need interactive mode, sending commands via stdin.
       const args: string[] = [];
       const isClaudeCli = this.executable === 'claude' || this.executable === 'claude-overflow';
+
       if (isClaudeCli) {
         args.push('--dangerously-skip-permissions');
-      }
-      if (commandToRun) {
-        // Parse command arguments - handle shell-style -c commands and quoted args
+        // Command will be sent via stdin after spawn to keep interactive mode
+      } else if (commandToRun) {
+        // For non-Claude executables (testing with bash, etc.), pass command as args
         const parsedArgs = this.parseCommandArgs(commandToRun);
         args.push(...parsedArgs);
       }
@@ -119,6 +122,14 @@ export class SessionManager extends EventEmitter<SessionManagerEvents> {
         cwd: workingDir,
         env: process.env as Record<string, string>,
       });
+
+      // For Claude CLI: Send the command via stdin after a short delay to let it initialize
+      // This keeps Claude in interactive mode rather than print mode
+      if (commandToRun && isClaudeCli) {
+        setTimeout(() => {
+          ptyProcess.write(commandToRun + '\n');
+        }, 1000); // Wait 1 second for Claude to be ready
+      }
 
       // Create session object
       const session: Session = {
@@ -200,6 +211,7 @@ export class SessionManager extends EventEmitter<SessionManagerEvents> {
 
   /**
    * Parses a command string into an array of arguments.
+   * Used for non-Claude executables (like bash for testing).
    * Handles quoted strings and shell-style -c commands.
    */
   private parseCommandArgs(command: string): string[] {
