@@ -7,6 +7,7 @@ import { registerGetCheckpointTool } from './tools/get-checkpoint.js';
 import { registerGetOutputTool } from './tools/get-output.js';
 import { registerGetStateTool } from './tools/get-state.js';
 import { registerListSessionsTool } from './tools/list-sessions.js';
+import { registerRespondCheckpointTool } from './tools/respond-checkpoint.js';
 import { registerStartSessionTool } from './tools/start-session.js';
 
 /**
@@ -45,7 +46,7 @@ export class GsdMcpServer {
 
   /**
    * Register MCP tools.
-   * Session control tools (03-02) and state/output tools (03-03).
+   * Session control tools (03-02), state/output tools (03-03), and checkpoint response (05-03).
    */
   private registerTools(): void {
     // 03-02: Session control tools
@@ -57,6 +58,9 @@ export class GsdMcpServer {
     registerGetOutputTool(this.server, this.manager);
     registerGetStateTool(this.server, this.manager);
     registerGetCheckpointTool(this.server, this.manager);
+
+    // 05-03: Checkpoint response tool
+    registerRespondCheckpointTool(this.server, this.manager);
   }
 
   /**
