@@ -1,13 +1,13 @@
 #!/bin/bash
 #
-# GSD Orchestration Harness - Project Setup Script
+# setup-gsd-harness.sh - GSD Orchestration Harness Setup
 #
 # Run this script from any project directory to enable harness functionality.
 #
 # Usage:
-#   curl -sSL https://raw.githubusercontent.com/[org]/gsd-orchestration-harness/main/scripts/setup-project.sh | bash
+#   curl -sSL https://raw.githubusercontent.com/[org]/gsd-orchestration-harness/main/scripts/setup-gsd-harness.sh | bash
 #   OR
-#   /path/to/gsd-orchestration-harness/scripts/setup-project.sh
+#   /path/to/gsd-orchestration-harness/scripts/setup-gsd-harness.sh
 #
 
 set -e

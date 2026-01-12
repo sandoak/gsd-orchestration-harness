@@ -65,10 +65,10 @@ Run the setup script from your project directory:
 
 ```bash
 # Option 1: If you have the harness cloned locally
-/path/to/gsd-orchestration-harness/scripts/setup-project.sh
+/path/to/gsd-orchestration-harness/scripts/setup-gsd-harness.sh
 
 # Option 2: Download and run
-curl -sSL https://raw.githubusercontent.com/[org]/gsd-orchestration-harness/main/scripts/setup-project.sh | bash
+curl -sSL https://raw.githubusercontent.com/[org]/gsd-orchestration-harness/main/scripts/setup-gsd-harness.sh | bash
 ```
 
 The script will:
