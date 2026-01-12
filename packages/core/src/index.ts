@@ -11,3 +11,4 @@ export * from './constants.js';
 
 // Parsers
 export * from './gsd-state-parser.js';
+export * from './checkpoint-parser.js';
