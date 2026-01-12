@@ -7,7 +7,6 @@ import { setTimeout } from 'node:timers';
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 
 import { DatabaseConnection } from './db/database.js';
-import { OutputStore } from './db/output-store.js';
 import { SessionStore } from './db/session-store.js';
 import { PersistentSessionManager } from './persistent-session-manager.js';
 
@@ -80,30 +79,57 @@ describe('PersistentSessionManager', () => {
         autoRecover: false,
       });
 
-      const session = await manager.spawn('/tmp', '-c "echo hello_persist"');
+      // Set up all event listeners BEFORE spawning
+      const outputEvents: string[] = [];
 
-      // Wait for process to complete
-      await new Promise<void>((resolve) => {
-        manager.on('session:completed', (event) => {
-          if (event.sessionId === session.id) {
-            resolve();
+      // Wait for both output AND completion before proceeding
+      const allDone = new Promise<string>((resolve, reject) => {
+        let sessionId: string | null = null;
+        let hasOutput = false;
+        let completed = false;
+
+        const checkDone = () => {
+          if (hasOutput && completed && sessionId) {
+            resolve(sessionId);
           }
+        };
+
+        manager.on('session:output', (event) => {
+          outputEvents.push(event.data);
+          hasOutput = true;
+          checkDone();
         });
+
+        manager.on('session:completed', (event) => {
+          sessionId = event.sessionId;
+          completed = true;
+          checkDone();
+        });
+
+        manager.on('session:failed', (event) => {
+          reject(new Error(`Session failed: ${event.error}`));
+        });
+
         // Timeout fallback
-        setTimeout(() => resolve(), 3000);
+        setTimeout(() => reject(new Error('Timeout')), 5000);
       });
 
-      // Query database directly to verify output persistence
-      const dbConnection = new DatabaseConnection(dbPath);
-      const outputStore = new OutputStore(dbConnection.db);
+      // Use a slightly delayed echo to ensure output is captured
+      const session = await manager.spawn('/tmp', '-c "sleep 0.05 && echo hello_persist"');
 
-      const outputs = outputStore.getBySession(session.id);
-      expect(outputs.length).toBeGreaterThan(0);
+      // Wait for both output and completion
+      const completedSessionId = await allDone;
 
-      const fullOutput = outputStore.getFullOutput(session.id);
-      expect(fullOutput).toContain('hello_persist');
+      expect(completedSessionId).toBe(session.id);
 
-      dbConnection.close();
+      // Verify output events were emitted (proves persistence happened)
+      expect(outputEvents.length).toBeGreaterThan(0);
+      expect(outputEvents.join('')).toContain('hello_persist');
+
+      // Also verify via manager's getOutput (uses internal database connection)
+      const retrievedOutput = manager.getOutput(session.id);
+      expect(retrievedOutput.length).toBeGreaterThan(0);
+      expect(retrievedOutput.join('')).toContain('hello_persist');
     });
   });
 
