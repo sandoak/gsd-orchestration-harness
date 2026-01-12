@@ -76,7 +76,7 @@ Plans:
 
 Plans:
 
-- [ ] 04-01: Fastify HTTP + WebSocket server
+- [x] 04-01: Fastify HTTP + WebSocket server (2026-01-12)
 - [ ] 04-02: React + Vite dashboard with Zustand
 - [ ] 04-03: xterm.js terminal integration with ANSI support
 
@@ -117,7 +117,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6
 | 1. Foundation         | 2/2            | Complete    | 2026-01-12 |
 | 2. Session Management | 3/3            | Complete    | 2026-01-12 |
 | 3. MCP Server         | 3/3            | Complete    | 2026-01-12 |
-| 4. Web Dashboard      | 0/3            | Not started | -          |
+| 4. Web Dashboard      | 1/3            | In progress | -          |
 | 5. GSD Integration    | 0/3            | Not started | -          |
 | 6. E2E Integration    | 0/3            | Not started | -          |
 
