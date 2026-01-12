@@ -90,7 +90,7 @@ Plans:
 
 Plans:
 
-- [ ] 05-01: GSD state parser (STATE.md, ROADMAP.md, PLAN.md)
+- [x] 05-01: GSD state parser (STATE.md, ROADMAP.md, PLAN.md) (2026-01-12)
 - [ ] 05-02: Checkpoint detection and classification
 - [ ] 05-03: Playwright verification for human-verify checkpoints
 
@@ -118,7 +118,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6
 | 2. Session Management | 3/3            | Complete    | 2026-01-12 |
 | 3. MCP Server         | 3/3            | Complete    | 2026-01-12 |
 | 4. Web Dashboard      | 3/3            | Complete    | 2026-01-12 |
-| 5. GSD Integration    | 0/3            | Not started | -          |
+| 5. GSD Integration    | 1/3            | In progress | -          |
 | 6. E2E Integration    | 0/3            | Not started | -          |
 
 ---
