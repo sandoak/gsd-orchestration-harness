@@ -23,7 +23,6 @@ NC='\033[0m' # No Color
 HARNESS_REPO="https://github.com/sandoak/gsd-orchestration-harness.git"
 HARNESS_DEFAULT_PATH="$HOME/.gsd-harness"
 SHARED_COMMANDS_PATH="/mnt/dev-linux/projects/general-reference/claude-shared-commands-agents-skills"
-MCP_CONFIG_TEMPLATE=".mcp.harness.json"
 
 echo -e "${BLUE}╔══════════════════════════════════════════════════════════════╗${NC}"
 echo -e "${BLUE}║  GSD Orchestration Harness - Project Setup                    ║${NC}"
@@ -34,45 +33,76 @@ echo ""
 PROJECT_DIR="$(pwd)"
 echo -e "${GREEN}Project directory:${NC} $PROJECT_DIR"
 
-# Step 1: Find or prompt for harness location
-find_harness() {
+# Step 1: Find, install, or repair harness
+find_or_install_harness() {
     echo ""
     echo -e "${YELLOW}Step 1: Locating harness installation...${NC}"
 
-    # Check common locations
     HARNESS_PATH=""
 
-    # Check if running from within harness repo
+    # Check if running from within harness repo (highest priority)
     if [ -f "./packages/harness/dist/index.js" ]; then
         HARNESS_PATH="$(pwd)"
-        echo -e "${GREEN}✓${NC} Found harness in current directory"
+        echo -e "${GREEN}✓${NC} Found built harness in current directory"
         return 0
     fi
 
-    # Check default installation path
-    if [ -f "$HARNESS_DEFAULT_PATH/packages/harness/dist/index.js" ]; then
-        HARNESS_PATH="$HARNESS_DEFAULT_PATH"
-        echo -e "${GREEN}✓${NC} Found harness at $HARNESS_PATH"
-        return 0
-    fi
-
-    # Check relative to script location
-    SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-    if [ -f "$SCRIPT_DIR/../packages/harness/dist/index.js" ]; then
-        HARNESS_PATH="$(cd "$SCRIPT_DIR/.." && pwd)"
-        echo -e "${GREEN}✓${NC} Found harness at $HARNESS_PATH"
-        return 0
-    fi
-
-    # Check if harness needs to be built
-    if [ -f "$SCRIPT_DIR/../packages/harness/src/index.ts" ]; then
-        HARNESS_PATH="$(cd "$SCRIPT_DIR/.." && pwd)"
-        echo -e "${YELLOW}!${NC} Found harness source at $HARNESS_PATH (needs build)"
+    # Check if running from harness repo but needs build
+    if [ -f "./package.json" ] && grep -q '"@gsd/harness"' "./pnpm-workspace.yaml" 2>/dev/null; then
+        HARNESS_PATH="$(pwd)"
+        echo -e "${YELLOW}!${NC} Found harness source in current directory (needs build)"
         return 1
     fi
 
-    echo -e "${RED}✗${NC} Harness not found"
-    return 2
+    # Check relative to script location (when script is run directly)
+    if [ -n "${BASH_SOURCE[0]}" ]; then
+        SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" 2>/dev/null && pwd)"
+        if [ -f "$SCRIPT_DIR/../packages/harness/dist/index.js" ]; then
+            HARNESS_PATH="$(cd "$SCRIPT_DIR/.." && pwd)"
+            echo -e "${GREEN}✓${NC} Found built harness at $HARNESS_PATH"
+            return 0
+        fi
+        if [ -f "$SCRIPT_DIR/../package.json" ]; then
+            HARNESS_PATH="$(cd "$SCRIPT_DIR/.." && pwd)"
+            echo -e "${YELLOW}!${NC} Found harness source at $HARNESS_PATH (needs build)"
+            return 1
+        fi
+    fi
+
+    # Check default installation path
+    if [ -d "$HARNESS_DEFAULT_PATH" ]; then
+        # Check if it's a valid installation
+        if [ -f "$HARNESS_DEFAULT_PATH/package.json" ]; then
+            if [ -f "$HARNESS_DEFAULT_PATH/packages/harness/dist/index.js" ]; then
+                HARNESS_PATH="$HARNESS_DEFAULT_PATH"
+                echo -e "${GREEN}✓${NC} Found built harness at $HARNESS_PATH"
+                return 0
+            else
+                HARNESS_PATH="$HARNESS_DEFAULT_PATH"
+                echo -e "${YELLOW}!${NC} Found harness at $HARNESS_PATH (needs build)"
+                return 1
+            fi
+        else
+            # Directory exists but is empty or corrupted
+            echo -e "${YELLOW}!${NC} Found corrupted installation at $HARNESS_DEFAULT_PATH"
+            echo "   Removing and re-cloning..."
+            rm -rf "$HARNESS_DEFAULT_PATH"
+        fi
+    fi
+
+    # Harness not found - clone it
+    echo -e "${YELLOW}!${NC} Harness not installed. Cloning from GitHub..."
+    echo ""
+
+    if ! git clone "$HARNESS_REPO" "$HARNESS_DEFAULT_PATH"; then
+        echo -e "${RED}✗${NC} Failed to clone harness repository"
+        echo "   Please check your internet connection and try again."
+        exit 1
+    fi
+
+    HARNESS_PATH="$HARNESS_DEFAULT_PATH"
+    echo -e "${GREEN}✓${NC} Cloned harness to $HARNESS_PATH"
+    return 1  # Needs build
 }
 
 # Step 2: Build harness if needed
@@ -82,21 +112,28 @@ build_harness() {
 
     cd "$HARNESS_PATH"
 
+    # Check for pnpm
     if ! command -v pnpm &> /dev/null; then
-        echo -e "${RED}✗${NC} pnpm not found. Install with: npm install -g pnpm"
+        echo -e "${YELLOW}!${NC} pnpm not found. Installing..."
+        npm install -g pnpm
+    fi
+
+    echo "   Installing dependencies..."
+    if ! pnpm install; then
+        echo -e "${RED}✗${NC} Failed to install dependencies"
         exit 1
     fi
 
-    echo "Installing dependencies..."
-    pnpm install --silent
-
-    echo "Building packages..."
-    pnpm build --silent
+    echo "   Building packages..."
+    if ! pnpm build; then
+        echo -e "${RED}✗${NC} Build failed"
+        exit 1
+    fi
 
     if [ -f "./packages/harness/dist/index.js" ]; then
         echo -e "${GREEN}✓${NC} Harness built successfully"
     else
-        echo -e "${RED}✗${NC} Build failed"
+        echo -e "${RED}✗${NC} Build completed but dist file not found"
         exit 1
     fi
 
@@ -120,7 +157,7 @@ create_mcp_config() {
             return 0
         fi
 
-        echo "Adding gsd-harness to existing config..."
+        echo "   Adding gsd-harness to existing config..."
         # Use jq if available, otherwise manual instructions
         if command -v jq &> /dev/null; then
             TMP_FILE=$(mktemp)
@@ -157,7 +194,7 @@ verify_shared_commands() {
     echo -e "${YELLOW}Step 4: Verifying shared commands...${NC}"
 
     if [ -d "$SHARED_COMMANDS_PATH/commands/gsd" ]; then
-        echo -e "${GREEN}✓${NC} Shared GSD commands found at $SHARED_COMMANDS_PATH"
+        echo -e "${GREEN}✓${NC} Shared GSD commands found"
 
         if [ -f "$SHARED_COMMANDS_PATH/commands/gsd/orchestrate.md" ]; then
             echo -e "${GREEN}✓${NC} gsd:orchestrate command available"
@@ -165,29 +202,26 @@ verify_shared_commands() {
             echo -e "${YELLOW}!${NC} gsd:orchestrate command not found in shared commands"
         fi
     else
-        echo -e "${YELLOW}!${NC} Shared commands not found at expected path"
-        echo "   Expected: $SHARED_COMMANDS_PATH"
-        echo ""
-        echo "   The GSD workflow files should be in your project at:"
-        echo "   .claude/get-shit-done/workflows/orchestrate.md"
+        echo -e "${YELLOW}!${NC} Shared commands not found (optional)"
+        echo "   The orchestrate workflow is also available via /gsd:orchestrate skill"
     fi
 }
 
-# Step 5: Verify workflow files
-verify_workflow_files() {
+# Step 5: Verify GSD installation
+verify_gsd() {
     echo ""
-    echo -e "${YELLOW}Step 5: Verifying workflow files...${NC}"
+    echo -e "${YELLOW}Step 5: Verifying GSD installation...${NC}"
 
-    WORKFLOW_FILE="$PROJECT_DIR/.claude/get-shit-done/workflows/orchestrate.md"
-
-    if [ -f "$WORKFLOW_FILE" ]; then
-        echo -e "${GREEN}✓${NC} orchestrate.md workflow exists"
+    if [ -d "$PROJECT_DIR/.claude/get-shit-done" ]; then
+        echo -e "${GREEN}✓${NC} GSD is installed in this project"
     else
-        echo -e "${YELLOW}!${NC} orchestrate.md workflow not found"
+        echo -e "${YELLOW}!${NC} GSD not installed in this project"
         echo ""
-        echo "   Copy from harness repo:"
-        echo "   cp $HARNESS_PATH/.claude/get-shit-done/workflows/orchestrate.md \\"
-        echo "      $PROJECT_DIR/.claude/get-shit-done/workflows/"
+        echo "   Install GSD first:"
+        echo "   npx get-shit-done-cc --global"
+        echo ""
+        echo "   Then initialize your project:"
+        echo "   /gsd:new-project"
     fi
 }
 
@@ -218,20 +252,8 @@ print_summary() {
 
 # Main execution
 main() {
-    find_harness
+    find_or_install_harness
     FIND_RESULT=$?
-
-    if [ $FIND_RESULT -eq 2 ]; then
-        echo ""
-        echo -e "${YELLOW}Harness not installed. Options:${NC}"
-        echo ""
-        echo "1. Clone and build:"
-        echo "   git clone $HARNESS_REPO $HARNESS_DEFAULT_PATH"
-        echo "   cd $HARNESS_DEFAULT_PATH && pnpm install && pnpm build"
-        echo ""
-        echo "2. Re-run this script after installation"
-        exit 1
-    fi
 
     if [ $FIND_RESULT -eq 1 ]; then
         build_harness
@@ -239,7 +261,7 @@ main() {
 
     create_mcp_config
     verify_shared_commands
-    verify_workflow_files
+    verify_gsd
     print_summary
 }
 
