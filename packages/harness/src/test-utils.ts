@@ -169,7 +169,7 @@ export function waitForWebSocket(wsUrl: string, timeout = 5000): Promise<WsConne
           sessions?: unknown[];
         };
 
-        if (message.type === 'init') {
+        if (message.type === 'initial-state') {
           initialState = { sessions: message.sessions ?? [] };
           resolved = true;
           clearTimeout(timeoutId);

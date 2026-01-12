@@ -30,6 +30,8 @@ export default [
         __filename: 'readonly',
         module: 'readonly',
         require: 'readonly',
+        // Node 22+ native globals
+        fetch: 'readonly',
       },
     },
     plugins: {

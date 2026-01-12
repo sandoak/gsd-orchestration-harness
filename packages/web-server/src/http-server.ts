@@ -89,8 +89,15 @@ export class FastifyServer {
 
   /**
    * Returns the server address once running.
+   * Uses actual listening address when available (important for port=0).
    */
   get address(): string {
+    if (this.isRunning) {
+      const addr = this.app.server.address();
+      if (addr && typeof addr === 'object') {
+        return `http://${addr.address}:${addr.port}`;
+      }
+    }
     return `http://${this.host}:${this.port}`;
   }
 
