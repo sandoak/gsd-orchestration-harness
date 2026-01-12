@@ -2,6 +2,8 @@ import type { PersistentSessionManager } from '@gsd/session-manager';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 
+import { registerEndSessionTool } from './tools/end-session.js';
+import { registerListSessionsTool } from './tools/list-sessions.js';
 import { registerStartSessionTool } from './tools/start-session.js';
 
 /**
@@ -45,6 +47,8 @@ export class GsdMcpServer {
   private registerTools(): void {
     // 03-02: Session control tools
     registerStartSessionTool(this.server, this.manager);
+    registerListSessionsTool(this.server, this.manager);
+    registerEndSessionTool(this.server, this.manager);
 
     // 03-03: gsd_get_output, gsd_get_state, gsd_get_checkpoint (to be added)
   }
