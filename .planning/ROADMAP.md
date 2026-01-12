@@ -20,7 +20,7 @@ Or: None (using established patterns)
 
 Decimal phases appear between their surrounding integers in numeric order.
 
-- [ ] **Phase 1: Foundation & Core Types** - Monorepo setup with shared types and build configuration (1/2 plans)
+- [x] **Phase 1: Foundation & Core Types** - Monorepo setup with shared types and build configuration (2/2 plans)
 - [ ] **Phase 2: Session Management** - Claude CLI process spawning with output capture and persistence
 - [ ] **Phase 3: MCP Server** - 6 tools for session control via stdio transport
 - [ ] **Phase 4: Web Dashboard** - Real-time terminal dashboard with xterm.js
@@ -39,7 +39,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 Plans:
 
 - [x] 01-01: Monorepo scaffolding and workspace configuration (2026-01-12)
-- [ ] 01-02: Shared types package with core interfaces
+- [x] 01-02: Shared types package with core interfaces (2026-01-12)
 
 ### Phase 2: Session Management
 
@@ -112,14 +112,14 @@ Plans:
 **Execution Order:**
 Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6
 
-| Phase                 | Plans Complete | Status      | Completed |
-| --------------------- | -------------- | ----------- | --------- |
-| 1. Foundation         | 1/2            | In progress | -         |
-| 2. Session Management | 0/3            | Not started | -         |
-| 3. MCP Server         | 0/3            | Not started | -         |
-| 4. Web Dashboard      | 0/3            | Not started | -         |
-| 5. GSD Integration    | 0/3            | Not started | -         |
-| 6. E2E Integration    | 0/3            | Not started | -         |
+| Phase                 | Plans Complete | Status      | Completed  |
+| --------------------- | -------------- | ----------- | ---------- |
+| 1. Foundation         | 2/2            | Complete    | 2026-01-12 |
+| 2. Session Management | 0/3            | Not started | -          |
+| 3. MCP Server         | 0/3            | Not started | -          |
+| 4. Web Dashboard      | 0/3            | Not started | -          |
+| 5. GSD Integration    | 0/3            | Not started | -          |
+| 6. E2E Integration    | 0/3            | Not started | -          |
 
 ---
 
