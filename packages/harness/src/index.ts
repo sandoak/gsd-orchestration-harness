@@ -36,6 +36,20 @@ async function main(): Promise<void> {
 
   // Create single shared session manager instance
   const manager = new PersistentSessionManager();
+
+  // Log recovery results (orphaned session cleanup)
+  manager.on('recovery:complete', (result) => {
+    if (result.orphanedCount > 0) {
+      log(`Recovery: Found ${result.orphanedCount} orphaned session(s)`);
+      if (result.killedPids.length > 0) {
+        log(
+          `Recovery: Killed ${result.killedPids.length} orphaned process(es): ${result.killedPids.join(', ')}`
+        );
+      }
+      log(`Recovery: Marked sessions as failed: ${result.markedFailed.join(', ')}`);
+    }
+  });
+
   log('Session manager initialized');
 
   // Create web dashboard server (HTTP + WebSocket)

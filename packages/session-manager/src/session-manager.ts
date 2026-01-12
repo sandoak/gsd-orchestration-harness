@@ -19,6 +19,7 @@ interface ManagedSession {
   session: Session;
   process: ChildProcess;
   outputBuffer: string[];
+  lastPolledAt: Date;
 }
 
 interface SessionManagerEvents {
@@ -101,6 +102,7 @@ export class SessionManager extends EventEmitter<SessionManagerEvents> {
       session,
       process: childProcess,
       outputBuffer: [],
+      lastPolledAt: new Date(),
     };
 
     this.sessions.set(sessionId, managedSession);
@@ -269,11 +271,44 @@ export class SessionManager extends EventEmitter<SessionManagerEvents> {
 
   /**
    * Gets the buffered output for a session.
+   * Also updates lastPolledAt timestamp for timeout tracking.
    * @param sessionId - ID of the session
    * @returns Array of output chunks or empty array if session not found
    */
   getOutput(sessionId: string): string[] {
-    return this.sessions.get(sessionId)?.outputBuffer ?? [];
+    const managed = this.sessions.get(sessionId);
+    if (managed) {
+      managed.lastPolledAt = new Date();
+    }
+    return managed?.outputBuffer ?? [];
+  }
+
+  /**
+   * Gets the last polled timestamp for a session.
+   * @param sessionId - ID of the session
+   * @returns Last polled date or undefined if session not found
+   */
+  getLastPolledAt(sessionId: string): Date | undefined {
+    return this.sessions.get(sessionId)?.lastPolledAt;
+  }
+
+  /**
+   * Finds sessions that haven't been polled within the timeout period.
+   * @param timeoutMs - Timeout in milliseconds (default: 10 minutes)
+   * @returns Array of session IDs that are stale
+   */
+  findStaleSessions(timeoutMs: number = 10 * 60 * 1000): string[] {
+    const now = Date.now();
+    const stale: string[] = [];
+
+    for (const [sessionId, managed] of this.sessions) {
+      const elapsed = now - managed.lastPolledAt.getTime();
+      if (elapsed > timeoutMs) {
+        stale.push(sessionId);
+      }
+    }
+
+    return stale;
   }
 
   /**

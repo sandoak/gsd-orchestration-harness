@@ -59,9 +59,32 @@ export class HarnessServer {
    * Registers REST API routes.
    */
   private registerApiRoutes(): void {
-    // GET /api/sessions - list all sessions
+    // GET /api/sessions - list all sessions with staleness info
     this.httpServer.app.get('/api/sessions', async () => {
-      return this.manager.listSessions();
+      const sessions = this.manager.listSessions();
+      const timeout = this.manager.getSessionTimeout();
+
+      return sessions.map((session) => {
+        const lastPolledAt = this.manager.getLastPolledAt(session.id);
+        const isStale = this.manager.isSessionStale(session.id);
+
+        return {
+          ...session,
+          lastPolledAt,
+          isStale,
+          timeoutMs: timeout,
+        };
+      });
+    });
+
+    // GET /api/sessions/stale - get only stale sessions
+    this.httpServer.app.get('/api/sessions/stale', async () => {
+      const staleIds = this.manager.getStaleSessions();
+      return {
+        stale: staleIds,
+        count: staleIds.length,
+        timeoutMs: this.manager.getSessionTimeout(),
+      };
     });
   }
 

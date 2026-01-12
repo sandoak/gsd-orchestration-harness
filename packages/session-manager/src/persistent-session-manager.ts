@@ -1,4 +1,5 @@
 import { EventEmitter } from 'node:events';
+import { setInterval, clearInterval } from 'node:timers';
 
 import type {
   Session,
@@ -27,6 +28,16 @@ interface PersistentSessionManagerEvents {
 }
 
 /**
+ * Default session timeout in milliseconds (10 minutes).
+ */
+const DEFAULT_SESSION_TIMEOUT = 10 * 60 * 1000;
+
+/**
+ * How often to check for stale sessions (1 minute).
+ */
+const TIMEOUT_CHECK_INTERVAL = 60 * 1000;
+
+/**
  * Options for PersistentSessionManager.
  */
 export interface PersistentSessionManagerOptions extends SessionManagerOptions {
@@ -41,6 +52,13 @@ export interface PersistentSessionManagerOptions extends SessionManagerOptions {
    * Defaults to true.
    */
   autoRecover?: boolean;
+
+  /**
+   * Session timeout in milliseconds. Sessions not polled within this time
+   * will be automatically terminated. Set to 0 to disable.
+   * Defaults to 10 minutes.
+   */
+  sessionTimeout?: number;
 }
 
 /**
@@ -60,6 +78,8 @@ export class PersistentSessionManager extends EventEmitter<PersistentSessionMana
   private sessionStore: SessionStore;
   private outputStore: OutputStore;
   private sessionManager: SessionManager;
+  private timeoutChecker: ReturnType<typeof setInterval> | null = null;
+  private sessionTimeout: number;
 
   constructor(options?: PersistentSessionManagerOptions) {
     super();
@@ -84,6 +104,42 @@ export class PersistentSessionManager extends EventEmitter<PersistentSessionMana
       const recoveryResult = recoverOrphanedSessions(this.sessionStore);
       // Emit recovery event - consumers can log or handle as needed
       this.emit('recovery:complete', recoveryResult);
+    }
+
+    // Set up session timeout checker
+    this.sessionTimeout = options?.sessionTimeout ?? DEFAULT_SESSION_TIMEOUT;
+    if (this.sessionTimeout > 0) {
+      this.startTimeoutChecker();
+    }
+  }
+
+  /**
+   * Starts the periodic timeout checker.
+   */
+  private startTimeoutChecker(): void {
+    this.timeoutChecker = setInterval(() => {
+      this.terminateStaleSessions();
+    }, TIMEOUT_CHECK_INTERVAL);
+
+    // Don't prevent process from exiting
+    this.timeoutChecker.unref();
+  }
+
+  /**
+   * Terminates sessions that haven't been polled within the timeout period.
+   */
+  private async terminateStaleSessions(): Promise<void> {
+    const staleSessions = this.sessionManager.findStaleSessions(this.sessionTimeout);
+
+    for (const sessionId of staleSessions) {
+      const session = this.sessionManager.getSession(sessionId);
+      if (session) {
+        // eslint-disable-next-line no-console
+        console.error(
+          `[gsd-harness] Terminating stale session ${sessionId} (not polled for ${Math.round(this.sessionTimeout / 60000)} minutes)`
+        );
+        await this.terminate(sessionId);
+      }
     }
   }
 
@@ -227,6 +283,36 @@ export class PersistentSessionManager extends EventEmitter<PersistentSessionMana
   }
 
   /**
+   * Gets the last polled timestamp for a session.
+   */
+  getLastPolledAt(sessionId: string): Date | undefined {
+    return this.sessionManager.getLastPolledAt(sessionId);
+  }
+
+  /**
+   * Gets the session timeout setting in milliseconds.
+   */
+  getSessionTimeout(): number {
+    return this.sessionTimeout;
+  }
+
+  /**
+   * Checks if a session is stale (not polled within timeout period).
+   */
+  isSessionStale(sessionId: string): boolean {
+    const lastPolled = this.sessionManager.getLastPolledAt(sessionId);
+    if (!lastPolled) return false;
+    return Date.now() - lastPolled.getTime() > this.sessionTimeout;
+  }
+
+  /**
+   * Gets stale session IDs.
+   */
+  getStaleSessions(): string[] {
+    return this.sessionManager.findStaleSessions(this.sessionTimeout);
+  }
+
+  /**
    * Sends input to a session's stdin.
    * Used to relay checkpoint responses from orchestrator to CLI.
    *
@@ -242,6 +328,12 @@ export class PersistentSessionManager extends EventEmitter<PersistentSessionMana
    * Closes the database connection and terminates any running sessions.
    */
   async close(): Promise<void> {
+    // Stop the timeout checker
+    if (this.timeoutChecker) {
+      clearInterval(this.timeoutChecker);
+      this.timeoutChecker = null;
+    }
+
     // Terminate all running sessions
     const liveSessions = this.sessionManager.listSessions();
     for (const session of liveSessions) {
