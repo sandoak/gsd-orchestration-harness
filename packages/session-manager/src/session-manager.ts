@@ -282,4 +282,20 @@ export class SessionManager extends EventEmitter<SessionManagerEvents> {
   get availableSlotsCount(): number {
     return this.availableSlots.size;
   }
+
+  /**
+   * Sends input to a session's stdin.
+   * Used to relay checkpoint responses from orchestrator to CLI.
+   * @param sessionId - ID of the session
+   * @param input - Text to write to stdin (will append newline)
+   * @returns true if sent, false if session not found or stdin not writable
+   */
+  sendInput(sessionId: string, input: string): boolean {
+    const managed = this.sessions.get(sessionId);
+    if (!managed?.process.stdin?.writable) {
+      return false;
+    }
+    managed.process.stdin.write(input + '\n');
+    return true;
+  }
 }

@@ -227,6 +227,18 @@ export class PersistentSessionManager extends EventEmitter<PersistentSessionMana
   }
 
   /**
+   * Sends input to a session's stdin.
+   * Used to relay checkpoint responses from orchestrator to CLI.
+   *
+   * @param sessionId - ID of the session
+   * @param input - Text to write to stdin (will append newline)
+   * @returns true if sent, false if session not found or stdin not writable
+   */
+  sendInput(sessionId: string, input: string): boolean {
+    return this.sessionManager.sendInput(sessionId, input);
+  }
+
+  /**
    * Closes the database connection and terminates any running sessions.
    */
   async close(): Promise<void> {
