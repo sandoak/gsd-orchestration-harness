@@ -1,7 +1,6 @@
-import { spawn, ChildProcess } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { EventEmitter } from 'node:events';
-import { setTimeout, clearTimeout } from 'node:timers';
+import { setTimeout, clearTimeout, setInterval, clearInterval } from 'node:timers';
 
 import type {
   Session,
@@ -12,12 +11,13 @@ import type {
   SessionFailedEvent,
 } from '@gsd/core';
 import { MAX_SESSIONS, SESSION_SLOTS, DEFAULT_OUTPUT_BUFFER_SIZE } from '@gsd/core';
+import * as pty from 'node-pty';
 
 type SlotNumber = (typeof SESSION_SLOTS)[number];
 
 interface ManagedSession {
   session: Session;
-  process: ChildProcess;
+  process: pty.IPty;
   outputBuffer: string[];
   lastPolledAt: Date;
 }
@@ -29,10 +29,23 @@ interface SessionManagerEvents {
   'session:failed': [event: SessionFailedEvent];
 }
 
+/**
+ * Determines the Claude CLI executable based on environment.
+ * - CLAUDE_EXECUTABLE env var takes priority
+ * - Falls back to 'claude' (default)
+ *
+ * For different accounts:
+ * - sandoakholdings@gmail.com → claude
+ * - chrisb@macconstruction.com → claude-overflow
+ */
+function getDefaultExecutable(): string {
+  return process.env.CLAUDE_EXECUTABLE ?? 'claude';
+}
+
 export interface SessionManagerOptions {
   outputBufferSize?: number;
   /**
-   * Executable to spawn. Defaults to 'claude'.
+   * Executable to spawn. Defaults to CLAUDE_EXECUTABLE env var or 'claude'.
    * Can be overridden for testing with simple shell commands.
    */
   executable?: string;
@@ -48,11 +61,12 @@ export class SessionManager extends EventEmitter<SessionManagerEvents> {
   private availableSlots: Set<SlotNumber> = new Set(SESSION_SLOTS);
   private outputBufferSize: number;
   private executable: string;
+  private spawnLock: boolean = false;
 
   constructor(options?: SessionManagerOptions) {
     super();
     this.outputBufferSize = options?.outputBufferSize ?? DEFAULT_OUTPUT_BUFFER_SIZE;
-    this.executable = options?.executable ?? 'claude';
+    this.executable = options?.executable ?? getDefaultExecutable();
   }
 
   /**
@@ -60,135 +74,165 @@ export class SessionManager extends EventEmitter<SessionManagerEvents> {
    * @param workingDir - Working directory for the Claude process
    * @param command - Optional command to pass to Claude
    * @returns The created session
-   * @throws Error if all slots are occupied
+   * @throws Error if all slots are occupied or spawn is in progress
    */
   async spawn(workingDir: string, command?: string): Promise<Session> {
-    // Check for available slot
-    if (this.availableSlots.size === 0) {
-      throw new Error(`All ${MAX_SESSIONS} session slots are occupied`);
+    // Prevent concurrent spawn operations to avoid race conditions
+    if (this.spawnLock) {
+      throw new Error('Spawn operation already in progress. Please wait and retry.');
     }
+    this.spawnLock = true;
 
-    // Assign slot (pick first available)
-    const slot = [...this.availableSlots][0] as SlotNumber;
-    this.availableSlots.delete(slot);
-
-    // Generate session ID
-    const sessionId = randomUUID();
-    const commandToRun = command ?? '';
-
-    // Build spawn arguments
-    const args = commandToRun ? [commandToRun] : [];
-
-    // Spawn the process
-    const childProcess = spawn(this.executable, args, {
-      cwd: workingDir,
-      shell: true,
-      stdio: ['pipe', 'pipe', 'pipe'],
-    });
-
-    // Create session object
-    const session: Session = {
-      id: sessionId,
-      slot,
-      status: 'running' as SessionStatus,
-      workingDir,
-      currentCommand: commandToRun || undefined,
-      startedAt: new Date(),
-      pid: childProcess.pid,
-    };
-
-    // Create managed session
-    const managedSession: ManagedSession = {
-      session,
-      process: childProcess,
-      outputBuffer: [],
-      lastPolledAt: new Date(),
-    };
-
-    this.sessions.set(sessionId, managedSession);
-
-    // Emit session started event
-    const startedEvent: SessionStartedEvent = {
-      type: 'session:started',
-      timestamp: new Date(),
-      sessionId,
-      slot,
-      workingDir,
-      command: commandToRun,
-    };
-    this.emit('session:started', startedEvent);
-
-    // Attach stdout handler
-    childProcess.stdout?.on('data', (data: Buffer) => {
-      const text = data.toString();
-      this.handleOutput(sessionId, 'stdout', text);
-    });
-
-    // Attach stderr handler
-    childProcess.stderr?.on('data', (data: Buffer) => {
-      const text = data.toString();
-      this.handleOutput(sessionId, 'stderr', text);
-    });
-
-    // Attach exit handler
-    childProcess.on('exit', (code, signal) => {
-      const managed = this.sessions.get(sessionId);
-      if (!managed) return;
-
-      managed.session.status = code === 0 ? 'completed' : 'failed';
-      managed.session.endedAt = new Date();
-
-      // Free the slot
-      this.availableSlots.add(slot);
-
-      if (code === 0 || code === null) {
-        const completedEvent: SessionCompletedEvent = {
-          type: 'session:completed',
-          timestamp: new Date(),
-          sessionId,
-          exitCode: code ?? 0,
-        };
-        this.emit('session:completed', completedEvent);
-      } else {
-        const failedEvent: SessionFailedEvent = {
-          type: 'session:failed',
-          timestamp: new Date(),
-          sessionId,
-          error: signal
-            ? `Process killed with signal ${signal}`
-            : `Process exited with code ${code}`,
-        };
-        this.emit('session:failed', failedEvent);
+    try {
+      // Check for available slot
+      if (this.availableSlots.size === 0) {
+        throw new Error(`All ${MAX_SESSIONS} session slots are occupied`);
       }
 
-      // Remove from active sessions after emitting events
-      this.sessions.delete(sessionId);
-    });
+      // Assign slot (pick first available)
+      const slot = [...this.availableSlots][0] as SlotNumber;
+      this.availableSlots.delete(slot);
 
-    // Attach error handler for spawn failures
-    childProcess.on('error', (err) => {
-      const managed = this.sessions.get(sessionId);
-      if (!managed) return;
+      // Generate session ID
+      const sessionId = randomUUID();
+      const commandToRun = command ?? '';
 
-      managed.session.status = 'failed';
-      managed.session.endedAt = new Date();
+      // Build spawn arguments
+      // Include --dangerously-skip-permissions for Claude CLI autonomous operation
+      const args: string[] = [];
+      const isClaudeCli = this.executable === 'claude' || this.executable === 'claude-overflow';
+      if (isClaudeCli) {
+        args.push('--dangerously-skip-permissions');
+      }
+      if (commandToRun) {
+        // Parse command arguments - handle shell-style -c commands and quoted args
+        const parsedArgs = this.parseCommandArgs(commandToRun);
+        args.push(...parsedArgs);
+      }
 
-      // Free the slot
-      this.availableSlots.add(slot);
+      // Spawn the process using PTY for proper terminal emulation
+      // This is required for Claude CLI which needs a terminal
+      const ptyProcess = pty.spawn(this.executable, args, {
+        name: 'xterm-256color',
+        cols: 120,
+        rows: 30,
+        cwd: workingDir,
+        env: process.env as Record<string, string>,
+      });
 
-      const failedEvent: SessionFailedEvent = {
-        type: 'session:failed',
+      // Create session object
+      const session: Session = {
+        id: sessionId,
+        slot,
+        status: 'running' as SessionStatus,
+        workingDir,
+        currentCommand: commandToRun || undefined,
+        startedAt: new Date(),
+        pid: ptyProcess.pid,
+      };
+
+      // Create managed session
+      const managedSession: ManagedSession = {
+        session,
+        process: ptyProcess,
+        outputBuffer: [],
+        lastPolledAt: new Date(),
+      };
+
+      this.sessions.set(sessionId, managedSession);
+
+      // Emit session started event
+      const startedEvent: SessionStartedEvent = {
+        type: 'session:started',
         timestamp: new Date(),
         sessionId,
-        error: err.message,
+        slot,
+        workingDir,
+        command: commandToRun,
       };
-      this.emit('session:failed', failedEvent);
+      this.emit('session:started', startedEvent);
 
-      // Remove from active sessions
-      this.sessions.delete(sessionId);
-    });
+      // Attach PTY data handler (combines stdout and stderr in PTY)
+      ptyProcess.onData((data: string) => {
+        this.handleOutput(sessionId, 'stdout', data);
+      });
 
-    return session;
+      // Attach PTY exit handler
+      ptyProcess.onExit(({ exitCode, signal }) => {
+        const managed = this.sessions.get(sessionId);
+        if (!managed) return;
+
+        managed.session.status = exitCode === 0 ? 'completed' : 'failed';
+        managed.session.endedAt = new Date();
+
+        // Free the slot
+        this.availableSlots.add(slot);
+
+        if (exitCode === 0) {
+          const completedEvent: SessionCompletedEvent = {
+            type: 'session:completed',
+            timestamp: new Date(),
+            sessionId,
+            exitCode,
+          };
+          this.emit('session:completed', completedEvent);
+        } else {
+          const failedEvent: SessionFailedEvent = {
+            type: 'session:failed',
+            timestamp: new Date(),
+            sessionId,
+            error: signal
+              ? `Process killed with signal ${signal}`
+              : `Process exited with code ${exitCode}`,
+          };
+          this.emit('session:failed', failedEvent);
+        }
+
+        // Remove from active sessions after emitting events
+        this.sessions.delete(sessionId);
+      });
+
+      return session;
+    } finally {
+      this.spawnLock = false;
+    }
+  }
+
+  /**
+   * Parses a command string into an array of arguments.
+   * Handles quoted strings and shell-style -c commands.
+   */
+  private parseCommandArgs(command: string): string[] {
+    // Handle bash-style -c "command" by splitting -c and the rest
+    const bashMatch = command.match(/^(-c)\s+["']?(.+?)["']?$/);
+    if (bashMatch && bashMatch[1] && bashMatch[2]) {
+      return [bashMatch[1], bashMatch[2]];
+    }
+
+    // For other commands, split on whitespace but preserve quoted strings
+    const args: string[] = [];
+    let current = '';
+    let inQuote: string | null = null;
+
+    for (const char of command) {
+      if ((char === '"' || char === "'") && !inQuote) {
+        inQuote = char;
+      } else if (char === inQuote) {
+        inQuote = null;
+      } else if (char === ' ' && !inQuote) {
+        if (current) {
+          args.push(current);
+          current = '';
+        }
+      } else {
+        current += char;
+      }
+    }
+    if (current) {
+      args.push(current);
+    }
+
+    return args;
   }
 
   /**
@@ -233,22 +277,24 @@ export class SessionManager extends EventEmitter<SessionManagerEvents> {
       return; // Session already gone or never existed
     }
 
-    // Kill the process
-    managed.process.kill('SIGTERM');
+    // Kill the PTY process - this sends SIGHUP to the process group
+    managed.process.kill();
 
-    // Wait a bit for graceful shutdown, then force kill if needed
+    // Wait for the exit event or timeout
     await new Promise<void>((resolve) => {
       const timeout = setTimeout(() => {
-        if (managed.process.killed === false) {
-          managed.process.kill('SIGKILL');
-        }
         resolve();
       }, 5000);
 
-      managed.process.on('exit', () => {
-        clearTimeout(timeout);
-        resolve();
-      });
+      // The onExit handler was already registered in spawn()
+      // Just wait for the timeout or for the session to be removed
+      const checkRemoved = setInterval(() => {
+        if (!this.sessions.has(sessionId)) {
+          clearInterval(checkRemoved);
+          clearTimeout(timeout);
+          resolve();
+        }
+      }, 100);
     });
   }
 
@@ -323,14 +369,14 @@ export class SessionManager extends EventEmitter<SessionManagerEvents> {
    * Used to relay checkpoint responses from orchestrator to CLI.
    * @param sessionId - ID of the session
    * @param input - Text to write to stdin (will append newline)
-   * @returns true if sent, false if session not found or stdin not writable
+   * @returns true if sent, false if session not found
    */
   sendInput(sessionId: string, input: string): boolean {
     const managed = this.sessions.get(sessionId);
-    if (!managed?.process.stdin?.writable) {
+    if (!managed) {
       return false;
     }
-    managed.process.stdin.write(input + '\n');
+    managed.process.write(input + '\n');
     return true;
   }
 }
