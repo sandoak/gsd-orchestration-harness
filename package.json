@@ -2,8 +2,10 @@
   "name": "gsd-orchestration-harness",
   "version": "0.1.0",
   "description": "GSD Orchestration Harness",
-  "type": "module",
-  "main": "dist/index.js",
+  "private": true,
+  "workspaces": [
+    "packages/*"
+  ],
   "scripts": {
     "dev": "tsx watch src/index.ts",
     "build": "tsc",
