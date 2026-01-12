@@ -87,6 +87,47 @@ export default [
     },
   },
 
+  // Scripts - allow console, setTimeout, etc.
+  {
+    files: ['scripts/**/*.ts'],
+    languageOptions: {
+      parser: tsparser,
+      parserOptions: {
+        ecmaVersion: 'latest',
+        sourceType: 'module',
+      },
+      globals: {
+        console: 'readonly',
+        process: 'readonly',
+        setTimeout: 'readonly',
+        clearTimeout: 'readonly',
+        setInterval: 'readonly',
+        clearInterval: 'readonly',
+      },
+    },
+    plugins: {
+      '@typescript-eslint': tseslint,
+      import: importPlugin,
+    },
+    rules: {
+      ...tseslint.configs.recommended.rules,
+      'no-console': 'off', // Scripts need console output
+      '@typescript-eslint/explicit-function-return-type': 'off', // Less strict for scripts
+      'no-control-regex': 'off', // Allow ANSI escape regex
+      'import/order': [
+        'error',
+        {
+          groups: ['builtin', 'external', 'internal', 'parent', 'sibling', 'index'],
+          'newlines-between': 'always',
+          alphabetize: {
+            order: 'asc',
+            caseInsensitive: true,
+          },
+        },
+      ],
+    },
+  },
+
   // React/Browser files (dashboard package)
   {
     files: ['packages/dashboard/**/*.ts', 'packages/dashboard/**/*.tsx'],
