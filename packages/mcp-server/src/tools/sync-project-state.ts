@@ -71,10 +71,20 @@ async function scanPlanningDirectory(projectPath: string): Promise<DiscoveredPla
       const summaryFile = file.replace('-PLAN.md', '-SUMMARY.md');
       const hasSummary = files.includes(summaryFile);
 
-      // Determine status based on SUMMARY existence
+      // Determine status based on SUMMARY existence and content
       let status: PlanStatus = 'planned';
       if (hasSummary) {
         status = 'executed';
+        // Check if SUMMARY contains "## Status: VERIFIED"
+        try {
+          const summaryPath = join(phasePath, summaryFile);
+          const summaryContent = await readFile(summaryPath, 'utf-8');
+          if (summaryContent.includes('## Status: VERIFIED')) {
+            status = 'verified';
+          }
+        } catch {
+          // Ignore read errors, keep as executed
+        }
       }
 
       plans.push({
@@ -187,7 +197,12 @@ export function registerSyncProjectStateTool(
         phaseGroups.set(plan.phaseNumber, existing);
       }
 
+      // Check for pending verify (all plans in a phase executed but not verified)
+      // Only SET pendingVerifyPhase if there's work to do, otherwise preserve existing state
+      // (mark_phase_verified clears it, sync shouldn't override that unless truly needed)
+      const currentState = orchestrationStore.getState(projectPath);
       let pendingVerifyPhase: number | null = null;
+
       for (const [phaseNum, phasePlans] of phaseGroups) {
         const allExecuted = phasePlans.every((p) => p.status === 'executed');
         const anyVerified = phasePlans.some((p) => p.status === 'verified');
@@ -198,7 +213,10 @@ export function registerSyncProjectStateTool(
         }
       }
 
-      if (pendingVerifyPhase !== null) {
+      // Only update pendingVerifyPhase if:
+      // 1. We found a phase needing verify AND it's different from current, OR
+      // 2. Current is set but we found no phase needing verify (clear it)
+      if (pendingVerifyPhase !== currentState.pendingVerifyPhase) {
         orchestrationStore.updateState(projectPath, { pendingVerifyPhase });
       }
 

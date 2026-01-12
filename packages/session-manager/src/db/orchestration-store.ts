@@ -174,8 +174,10 @@ export class OrchestrationStore {
          ON CONFLICT(project_path, phase_number, plan_number) DO UPDATE SET
            plan_path = excluded.plan_path,
            status = CASE
-             WHEN phase_plans.status IN ('executed', 'verified') AND excluded.status = 'planned'
-             THEN phase_plans.status
+             WHEN phase_plans.status = 'verified'
+             THEN phase_plans.status  -- Never downgrade verified status
+             WHEN phase_plans.status = 'executed' AND excluded.status = 'planned'
+             THEN phase_plans.status  -- Don't downgrade executed to planned
              ELSE excluded.status
            END`
       )
