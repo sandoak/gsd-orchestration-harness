@@ -103,6 +103,40 @@ importers:
         specifier: ^6.0.0
         version: 6.4.1(@types/node@20.19.28)(jiti@1.21.7)(tsx@4.21.0)(yaml@2.8.2)
 
+  packages/harness:
+    dependencies:
+      '@gsd/core':
+        specifier: workspace:*
+        version: link:../core
+      '@gsd/mcp-server':
+        specifier: workspace:*
+        version: link:../mcp-server
+      '@gsd/session-manager':
+        specifier: workspace:*
+        version: link:../session-manager
+      '@gsd/web-server':
+        specifier: workspace:*
+        version: link:../web-server
+    devDependencies:
+      '@types/node':
+        specifier: ^20.19.28
+        version: 20.19.28
+      '@types/ws':
+        specifier: ^8.18.1
+        version: 8.18.1
+      tsx:
+        specifier: ^4.7.0
+        version: 4.21.0
+      typescript:
+        specifier: ^5.3.0
+        version: 5.9.3
+      vitest:
+        specifier: ^1.6.1
+        version: 1.6.1(@types/node@20.19.28)
+      ws:
+        specifier: ^8.19.0
+        version: 8.19.0
+
   packages/mcp-server:
     dependencies:
       '@gsd/core':
@@ -1024,6 +1058,9 @@ packages:
 
   '@types/react@19.2.8':
     resolution: {integrity: sha512-3MbSL37jEchWZz2p2mjntRZtPt837ij10ApxKfgmXCTuHWagYg7iA5bqPw6C8BMPfwidlvfPI/fxOc42HLhcyg==}
+
+  '@types/ws@8.18.1':
+    resolution: {integrity: sha512-ThVF6DCVhA8kUGy+aazFQ4kXQ7E1Ty7A3ypFOe0IcJV8O/M511G99AW24irKrW56Wt44yG9+ij8FaqoBGkuBXg==}
 
   '@typescript-eslint/eslint-plugin@8.52.0':
     resolution: {integrity: sha512-okqtOgqu2qmZJ5iN4TWlgfF171dZmx2FzdOv2K/ixL2LZWDStL8+JgQerI2sa8eAEfoydG9+0V96m7V+P8yE1Q==}
@@ -3894,6 +3931,10 @@ snapshots:
   '@types/react@19.2.8':
     dependencies:
       csstype: 3.2.3
+
+  '@types/ws@8.18.1':
+    dependencies:
+      '@types/node': 20.19.28
 
   '@typescript-eslint/eslint-plugin@8.52.0(@typescript-eslint/parser@8.52.0(eslint@9.39.2(jiti@1.21.7))(typescript@5.9.3))(eslint@9.39.2(jiti@1.21.7))(typescript@5.9.3)':
     dependencies:
