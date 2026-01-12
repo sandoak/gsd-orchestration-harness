@@ -13,6 +13,18 @@ import { GsdMcpServer } from './server.js';
 // Export GsdMcpServer for testing and programmatic use
 export { GsdMcpServer } from './server.js';
 
+// Export tool registration functions for HTTP transport
+export { registerEndSessionTool } from './tools/end-session.js';
+export { registerGetCheckpointTool } from './tools/get-checkpoint.js';
+export { registerGetOutputTool } from './tools/get-output.js';
+export { registerGetStateTool } from './tools/get-state.js';
+export { registerListSessionsTool } from './tools/list-sessions.js';
+export { registerRespondCheckpointTool } from './tools/respond-checkpoint.js';
+export { registerSetExecutionStateTool } from './tools/set-execution-state.js';
+export { registerStartSessionTool } from './tools/start-session.js';
+export { registerSyncProjectStateTool } from './tools/sync-project-state.js';
+export { registerWaitForStateChangeTool } from './tools/wait-for-state-change.js';
+
 /**
  * Main entry point - creates manager and server, handles shutdown.
  */

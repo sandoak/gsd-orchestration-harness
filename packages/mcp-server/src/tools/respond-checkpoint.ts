@@ -30,6 +30,9 @@ export function registerRespondCheckpointTool(
     'gsd_respond_checkpoint',
     respondCheckpointSchema,
     async ({ sessionId, response }) => {
+      console.log(
+        `[mcp] gsd_respond_checkpoint called - sessionId: ${sessionId}, response: ${response}`
+      );
       // Verify session exists
       const session = manager.getSession(sessionId);
       if (!session) {

@@ -2,16 +2,16 @@
 /**
  * GSD Orchestration Harness - Unified Entry Point
  *
- * This is the main entry point that starts both the MCP server and web dashboard
- * with a shared PersistentSessionManager instance.
+ * This is the main entry point that starts the web dashboard with integrated
+ * HTTP Streamable MCP support.
  *
  * The harness enables:
- * - Claude Code to call MCP tools via stdio
+ * - Claude Code to call MCP tools via HTTP Streamable transport (http://localhost:3333/mcp)
+ * - Multiple Claude Code clients to connect simultaneously
  * - Humans to monitor sessions via the web dashboard (http://localhost:3333)
  * - Real-time session event streaming via WebSocket (/ws)
  */
 
-import { GsdMcpServer } from '@gsd/mcp-server';
 import { PersistentSessionManager } from '@gsd/session-manager';
 import { HarnessServer } from '@gsd/web-server';
 
@@ -29,15 +29,15 @@ const DEFAULT_PORT = 3333;
 const HARNESS_CHILD_ENV = 'GSD_HARNESS_CHILD';
 
 /**
- * Logs a message to stderr to avoid interfering with MCP stdout communication.
+ * Logs a message to stderr.
  */
 function log(message: string): void {
-  // eslint-disable-next-line no-console -- CLI output must go to stderr
+  // eslint-disable-next-line no-console -- CLI output
   console.error(`[gsd-harness] ${message}`);
 }
 
 /**
- * Main entry point - creates shared manager and starts both servers.
+ * Main entry point - creates shared manager and starts web server with HTTP MCP.
  */
 async function main(): Promise<void> {
   // Skip initialization if running as a child session
@@ -69,21 +69,18 @@ async function main(): Promise<void> {
 
   log('Session manager initialized');
 
-  // Create web dashboard server (HTTP + WebSocket)
+  // Create web server (HTTP + WebSocket + MCP HTTP transport)
   const port = parseInt(process.env.GSD_HARNESS_PORT ?? String(DEFAULT_PORT), 10);
   const webServer = new HarnessServer({
     manager,
     port,
   });
 
-  // Create MCP server (stdio transport)
-  const mcpServer = new GsdMcpServer(manager);
-
   // Track shutdown state
   let isShuttingDown = false;
 
   /**
-   * Handles graceful shutdown of both servers.
+   * Handles graceful shutdown.
    */
   const shutdown = async (): Promise<void> => {
     if (isShuttingDown) {
@@ -94,13 +91,13 @@ async function main(): Promise<void> {
     log('Shutting down...');
 
     try {
-      // Stop web server first (stops accepting new connections)
+      // Stop web server (includes MCP HTTP sessions)
       await webServer.stop();
       log('Web server stopped');
 
-      // Close MCP server (also closes the session manager)
-      await mcpServer.close();
-      log('MCP server stopped');
+      // Close session manager
+      await manager.close();
+      log('Session manager closed');
 
       log('Shutdown complete');
       process.exit(0);
@@ -115,14 +112,17 @@ async function main(): Promise<void> {
   process.on('SIGTERM', () => void shutdown());
 
   try {
-    // Start web server first
+    // Start web server (includes HTTP MCP endpoint at /mcp)
     await webServer.start();
     log(`Web dashboard running at http://localhost:${port}`);
+    log(`MCP HTTP endpoint at http://localhost:${port}/mcp`);
     log(`WebSocket endpoint at ws://localhost:${port}/ws`);
+    log('Ready for connections');
 
-    // Start MCP server (this blocks waiting for MCP messages on stdin)
-    log('MCP server ready on stdio');
-    await mcpServer.start();
+    // Keep the process running
+    await new Promise(() => {
+      // Never resolves - keeps process alive until shutdown signal
+    });
   } catch (error) {
     log(`Failed to start harness: ${error instanceof Error ? error.message : String(error)}`);
     await shutdown();

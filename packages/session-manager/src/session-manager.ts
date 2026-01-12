@@ -106,6 +106,11 @@ export class SessionManager extends EventEmitter<SessionManagerEvents> {
 
       if (isClaudeCli) {
         args.push('--dangerously-skip-permissions');
+        // Use --strict-mcp-config alone to prevent child from loading any MCP servers
+        // from .mcp.json - child sessions don't need MCP servers
+        // for basic plan execution (Read, Write, Edit, Bash are all built-in)
+        // Note: --strict-mcp-config without --mcp-config means no MCP servers
+        args.push('--strict-mcp-config');
         // Command will be sent via stdin after spawn to keep interactive mode
       } else if (commandToRun) {
         // For non-Claude executables (testing with bash, etc.), pass command as args
@@ -123,10 +128,12 @@ export class SessionManager extends EventEmitter<SessionManagerEvents> {
 
       // Spawn the process using PTY for proper terminal emulation
       // This is required for Claude CLI which needs a terminal
+      // Use 80 cols (standard terminal width) to work better with narrow dashboard slots
+      // The frontend will resize the PTY to match actual terminal dimensions
       const ptyProcess = pty.spawn(this.executable, args, {
         name: 'xterm-256color',
-        cols: 120,
-        rows: 30,
+        cols: 80,
+        rows: 24,
         cwd: workingDir,
         env: childEnv,
       });
@@ -140,7 +147,7 @@ export class SessionManager extends EventEmitter<SessionManagerEvents> {
         // Watch for Claude Code to be fully ready before sending command
         // Claude Code shows: prompt (❯), then loads MCP servers, shows status bar
         // We need to wait for full initialization, not just the prompt
-        const checkForReady = (data: string) => {
+        const checkForReady = (data: string): void => {
           if (commandSent) return;
           outputBuffer += data;
 
@@ -157,10 +164,19 @@ export class SessionManager extends EventEmitter<SessionManagerEvents> {
           if (hasPrompt && hasMcpStatus) {
             commandSent = true;
             // Wait 2 seconds after full initialization before sending command
-            // This gives Claude Code time to be truly ready for input
             setTimeout(() => {
-              // Use \r (carriage return) to submit - PTY expects this, not \n
-              ptyProcess.write(commandToRun + '\r');
+              // Claude Code sometimes needs Enter pressed twice to submit
+              // Send command, then Enter twice with delays
+              ptyProcess.write(commandToRun);
+
+              // First Enter after 300ms
+              setTimeout(() => {
+                ptyProcess.write('\r');
+                // Second Enter after another 300ms (the one that actually submits)
+                setTimeout(() => {
+                  ptyProcess.write('\r');
+                }, 300);
+              }, 300);
             }, 2000);
           }
         };
@@ -434,7 +450,9 @@ export class SessionManager extends EventEmitter<SessionManagerEvents> {
     if (!managed) {
       return false;
     }
-    managed.process.write(input + '\n');
+    // PTY requires \r (carriage return) to submit input
+    // Send input + double \r to handle Claude prompts that need two enters
+    managed.process.write(input + '\r\r');
     return true;
   }
 

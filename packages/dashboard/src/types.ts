@@ -7,7 +7,7 @@ export type SessionStatus = 'idle' | 'running' | 'waiting_checkpoint' | 'complet
 
 export interface Session {
   id: string;
-  slot: 1 | 2 | 3;
+  slot: 1 | 2 | 3 | 4;
   status: SessionStatus;
   workingDir: string;
   currentCommand?: string;
@@ -70,7 +70,7 @@ export interface BaseEvent {
 
 export interface SessionStartedEvent extends BaseEvent {
   type: 'session:started';
-  slot: 1 | 2 | 3;
+  slot: 1 | 2 | 3 | 4;
   workingDir: string;
   command: string;
 }
@@ -108,7 +108,7 @@ export interface SessionSummary {
   id: string;
   status: SessionStatus;
   workingDir: string;
-  slot: 1 | 2 | 3;
+  slot: 1 | 2 | 3 | 4;
   startedAt: Date;
 }
 

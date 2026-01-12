@@ -9,6 +9,7 @@ import { registerGetStateTool } from './tools/get-state.js';
 import { registerListSessionsTool } from './tools/list-sessions.js';
 import { registerRespondCheckpointTool } from './tools/respond-checkpoint.js';
 import { registerStartSessionTool } from './tools/start-session.js';
+import { registerWaitForStateChangeTool } from './tools/wait-for-state-change.js';
 
 /**
  * MCP server version - should match package.json.
@@ -61,6 +62,9 @@ export class GsdMcpServer {
 
     // 05-03: Checkpoint response tool
     registerRespondCheckpointTool(this.server, this.manager);
+
+    // Efficient monitoring tool (reduces polling context burn)
+    registerWaitForStateChangeTool(this.server, this.manager);
   }
 
   /**

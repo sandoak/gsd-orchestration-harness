@@ -2,6 +2,7 @@ import type { Session } from '@gsd/core';
 import type { PersistentSessionManager } from '@gsd/session-manager';
 
 import { FastifyServer, type FastifyServerOptions } from './http-server.js';
+import { McpHttpHandler } from './mcp-http-handler.js';
 import { WsServer } from './ws-server.js';
 
 export interface HarnessServerOptions extends FastifyServerOptions {
@@ -24,6 +25,7 @@ export interface HarnessServerOptions extends FastifyServerOptions {
 export class HarnessServer {
   private readonly httpServer: FastifyServer;
   private readonly wsServer: WsServer;
+  private readonly mcpHandler: McpHttpHandler;
   private readonly manager: PersistentSessionManager;
 
   constructor(options: HarnessServerOptions) {
@@ -40,6 +42,9 @@ export class HarnessServer {
       getSessions: (): Session[] => this.manager.listSessions(),
     });
 
+    // Create MCP HTTP handler for Streamable HTTP transport
+    this.mcpHandler = new McpHttpHandler(this.manager);
+
     // Register API routes (sync)
     this.registerApiRoutes();
 
@@ -53,6 +58,14 @@ export class HarnessServer {
    */
   private async registerWebSocket(): Promise<void> {
     await this.wsServer.register(this.httpServer.app);
+  }
+
+  /**
+   * Registers MCP HTTP handler routes.
+   * Must be called before start().
+   */
+  private registerMcpHandler(): void {
+    this.mcpHandler.register(this.httpServer.app);
   }
 
   /**
@@ -167,9 +180,11 @@ export class HarnessServer {
 
   /**
    * Starts the server.
-   * Registers WebSocket before starting HTTP server.
+   * Registers WebSocket and MCP handler before starting HTTP server.
    */
   async start(): Promise<void> {
+    // Register MCP HTTP handler routes
+    this.registerMcpHandler();
     // Register WebSocket plugin (must be before listen)
     await this.registerWebSocket();
     await this.httpServer.start();
@@ -179,6 +194,8 @@ export class HarnessServer {
    * Stops the server gracefully.
    */
   async stop(): Promise<void> {
+    // Close all MCP sessions first
+    await this.mcpHandler.closeAll();
     await this.httpServer.stop();
   }
 

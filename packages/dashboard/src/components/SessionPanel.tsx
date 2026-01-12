@@ -9,7 +9,7 @@ export function SessionPanel() {
   // Find the best session for each slot:
   // 1. Prefer running/waiting sessions
   // 2. Fall back to most recent completed/failed session
-  const getSessionForSlot = (slot: 1 | 2 | 3): Session | undefined => {
+  const getSessionForSlot = (slot: 1 | 2 | 3 | 4): Session | undefined => {
     let runningSession: Session | undefined;
     let latestSession: Session | undefined;
 
@@ -32,10 +32,14 @@ export function SessionPanel() {
   };
 
   return (
-    <div className="grid h-full grid-cols-1 gap-4 overflow-hidden md:grid-cols-3">
+    // Use lg breakpoint (1024px) for 2x2 grid layout
+    // Below 1024px: 1 column (each slot gets full width)
+    // Above 1024px: 2x2 grid (4 slots)
+    <div className="grid h-full grid-cols-1 gap-4 overflow-hidden lg:grid-cols-2">
       <SessionSlot slot={1} session={getSessionForSlot(1)} />
       <SessionSlot slot={2} session={getSessionForSlot(2)} />
       <SessionSlot slot={3} session={getSessionForSlot(3)} />
+      <SessionSlot slot={4} session={getSessionForSlot(4)} />
     </div>
   );
 }

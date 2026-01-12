@@ -17,7 +17,11 @@ export {
   closeDatabase,
   SessionStore,
   OutputStore,
+  OrchestrationStore,
   type SessionUpdateFields,
+  type OrchestrationState,
+  type PhasePlan,
+  type PlanStatus,
 } from './db/index.js';
 
 // Re-export relevant types from @gsd/core

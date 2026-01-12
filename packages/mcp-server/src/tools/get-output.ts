@@ -6,7 +6,14 @@ import { z } from 'zod';
  * Schema for gsd_get_output tool parameters.
  */
 const getOutputSchema = {
-  sessionId: z.string().describe('ID of the session to get output from'),
+  sessionId: z.string().optional().describe('ID of the session to get output from'),
+  slot: z
+    .number()
+    .int()
+    .min(1)
+    .max(3)
+    .optional()
+    .describe('Slot number (1-3) to get output from. Alternative to sessionId.'),
   lines: z
     .number()
     .int()
@@ -25,9 +32,50 @@ const getOutputSchema = {
  * @param manager - The PersistentSessionManager instance
  */
 export function registerGetOutputTool(server: McpServer, manager: PersistentSessionManager): void {
-  server.tool('gsd_get_output', getOutputSchema, async ({ sessionId, lines, since }) => {
+  server.tool('gsd_get_output', getOutputSchema, async ({ sessionId, slot, lines, since }) => {
+    console.log(
+      `[mcp] gsd_get_output called - sessionId: ${sessionId}, slot: ${slot}, lines: ${lines}`
+    );
+    // Resolve session ID from slot if provided
+    let resolvedSessionId = sessionId;
+
+    if (slot !== undefined && !sessionId) {
+      // Find session by slot number
+      const sessions = manager.listSessions();
+      const slotSession = sessions.find((s) => s.slot === slot);
+      if (slotSession) {
+        resolvedSessionId = slotSession.id;
+      } else {
+        return {
+          content: [
+            {
+              type: 'text',
+              text: JSON.stringify({
+                success: false,
+                error: `No session found in slot ${slot}`,
+              }),
+            },
+          ],
+        };
+      }
+    }
+
+    if (!resolvedSessionId) {
+      return {
+        content: [
+          {
+            type: 'text',
+            text: JSON.stringify({
+              success: false,
+              error: 'Either sessionId or slot must be provided',
+            }),
+          },
+        ],
+      };
+    }
+
     // Verify session exists
-    const session = manager.getSession(sessionId);
+    const session = manager.getSession(resolvedSessionId);
     if (!session) {
       return {
         content: [
@@ -35,7 +83,7 @@ export function registerGetOutputTool(server: McpServer, manager: PersistentSess
             type: 'text',
             text: JSON.stringify({
               success: false,
-              error: `Session not found: ${sessionId}`,
+              error: `Session not found: ${resolvedSessionId}`,
             }),
           },
         ],
@@ -44,7 +92,7 @@ export function registerGetOutputTool(server: McpServer, manager: PersistentSess
 
     try {
       // Get output chunks from manager
-      const outputChunks = manager.getOutput(sessionId);
+      const outputChunks = manager.getOutput(resolvedSessionId);
 
       if (outputChunks.length === 0) {
         return {
@@ -53,7 +101,7 @@ export function registerGetOutputTool(server: McpServer, manager: PersistentSess
               type: 'text',
               text: JSON.stringify({
                 success: true,
-                sessionId,
+                sessionId: resolvedSessionId,
                 output: '',
                 lineCount: 0,
               }),
@@ -89,7 +137,7 @@ export function registerGetOutputTool(server: McpServer, manager: PersistentSess
             type: 'text',
             text: JSON.stringify({
               success: true,
-              sessionId,
+              sessionId: resolvedSessionId,
               output: filteredOutput,
               lineCount: outputLines.length,
             }),

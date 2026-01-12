@@ -2,7 +2,7 @@ export type SessionStatus = 'idle' | 'running' | 'waiting_checkpoint' | 'complet
 
 export interface Session {
   id: string;
-  slot: 1 | 2 | 3;
+  slot: 1 | 2 | 3 | 4;
   status: SessionStatus;
   workingDir: string;
   currentCommand?: string;

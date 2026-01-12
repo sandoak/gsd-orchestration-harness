@@ -23,7 +23,7 @@ export interface SessionSummary {
   id: string;
   status: SessionStatus;
   workingDir: string;
-  slot: 1 | 2 | 3;
+  slot: 1 | 2 | 3 | 4;
   startedAt: Date;
 }
 

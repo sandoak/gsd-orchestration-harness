@@ -1,7 +1,7 @@
 {
   "name": "@gsd/harness",
   "version": "0.1.0",
-  "description": "GSD Orchestration Harness - Unified entry point for MCP server and web dashboard",
+  "description": "GSD Orchestration Harness - Web dashboard with HTTP Streamable MCP support",
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -24,7 +24,6 @@
   },
   "dependencies": {
     "@gsd/core": "workspace:*",
-    "@gsd/mcp-server": "workspace:*",
     "@gsd/session-manager": "workspace:*",
     "@gsd/web-server": "workspace:*"
   },

@@ -1,5 +1,9 @@
 {
   "mcpServers": {
+    "gsd-harness": {
+      "type": "http",
+      "url": "http://localhost:3333/mcp"
+    },
     "mcp-sandbox": {
       "type": "http",
       "url": "http://192.168.50.121:3000/mcp"

@@ -26,6 +26,7 @@ export function registerListSessionsTool(
   manager: PersistentSessionManager
 ): void {
   server.tool('gsd_list_sessions', listSessionsSchema, async ({ filter }) => {
+    console.log(`[mcp] gsd_list_sessions called - filter: ${filter}`);
     try {
       let sessions = manager.listSessions();
 

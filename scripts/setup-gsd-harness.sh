@@ -158,7 +158,6 @@ create_mcp_config() {
     echo -e "${YELLOW}Step 3: Creating MCP configuration...${NC}"
 
     MCP_FILE="$PROJECT_DIR/.mcp.json"
-    HARNESS_ENTRY="$HARNESS_PATH/packages/harness/dist/index.js"
 
     if [ -f "$MCP_FILE" ]; then
         echo -e "${YELLOW}!${NC} .mcp.json already exists"
@@ -173,15 +172,15 @@ create_mcp_config() {
         # Use jq if available, otherwise manual instructions
         if command -v jq &> /dev/null; then
             TMP_FILE=$(mktemp)
-            jq --arg path "$HARNESS_ENTRY" '.mcpServers["gsd-harness"] = {"command": "node", "args": [$path]}' "$MCP_FILE" > "$TMP_FILE"
+            jq '.mcpServers["gsd-harness"] = {"type": "http", "url": "http://localhost:3333/mcp"}' "$MCP_FILE" > "$TMP_FILE"
             mv "$TMP_FILE" "$MCP_FILE"
             echo -e "${GREEN}✓${NC} Added gsd-harness to .mcp.json"
         else
             echo -e "${YELLOW}!${NC} jq not installed. Please manually add to .mcp.json:"
             echo ""
             echo '    "gsd-harness": {'
-            echo '      "command": "node",'
-            echo "      \"args\": [\"$HARNESS_ENTRY\"]"
+            echo '      "type": "http",'
+            echo '      "url": "http://localhost:3333/mcp"'
             echo '    }'
         fi
     else
@@ -190,8 +189,8 @@ create_mcp_config() {
 {
   "mcpServers": {
     "gsd-harness": {
-      "command": "node",
-      "args": ["$HARNESS_ENTRY"]
+      "type": "http",
+      "url": "http://localhost:3333/mcp"
     }
   }
 }
@@ -237,7 +236,45 @@ verify_gsd() {
     fi
 }
 
-# Step 6: Print summary
+# Step 6: Install orchestrate workflow
+install_orchestrate_workflow() {
+    echo ""
+    echo -e "${YELLOW}Step 6: Installing orchestrate workflow from git...${NC}"
+
+    WORKFLOW_URL="https://raw.githubusercontent.com/sandoak/gsd-orchestration-harness/main/.claude/get-shit-done/workflows/orchestrate.md"
+    WORKFLOW_DEST_DIR="$PROJECT_DIR/.claude/get-shit-done/workflows"
+    WORKFLOW_DEST="$WORKFLOW_DEST_DIR/orchestrate.md"
+
+    # Check if GSD is installed (workflow dir should exist)
+    if [ ! -d "$WORKFLOW_DEST_DIR" ]; then
+        echo -e "${YELLOW}!${NC} GSD workflows directory not found"
+        echo "   Install GSD first, then re-run setup to install orchestrate workflow"
+        return 1
+    fi
+
+    # Download latest orchestrate.md from git (always get fresh copy)
+    echo "   Downloading latest orchestrate.md from GitHub..."
+    if curl -sSL "$WORKFLOW_URL" -o "$WORKFLOW_DEST"; then
+        echo -e "${GREEN}✓${NC} Installed latest orchestrate workflow to $WORKFLOW_DEST"
+    else
+        echo -e "${YELLOW}!${NC} Failed to download from GitHub, trying local copy..."
+        # Fallback to local copy from harness installation
+        WORKFLOW_SOURCE="$HARNESS_PATH/.claude/get-shit-done/workflows/orchestrate.md"
+        if [ -f "$WORKFLOW_SOURCE" ]; then
+            if cp "$WORKFLOW_SOURCE" "$WORKFLOW_DEST"; then
+                echo -e "${GREEN}✓${NC} Installed orchestrate workflow from local harness"
+            else
+                echo -e "${RED}✗${NC} Failed to copy orchestrate workflow"
+                return 1
+            fi
+        else
+            echo -e "${RED}✗${NC} No orchestrate.md source available"
+            return 1
+        fi
+    fi
+}
+
+# Step 7: Print summary
 print_summary() {
     echo ""
     echo -e "${BLUE}╔══════════════════════════════════════════════════════════════╗${NC}"
@@ -274,6 +311,7 @@ main() {
     create_mcp_config
     verify_shared_commands
     verify_gsd
+    install_orchestrate_workflow
     print_summary
 }
 

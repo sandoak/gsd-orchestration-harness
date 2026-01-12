@@ -11,6 +11,7 @@ import type {
 } from '@gsd/core';
 
 import { DatabaseConnection } from './db/database.js';
+import { OrchestrationStore } from './db/orchestration-store.js';
 import { OutputStore } from './db/output-store.js';
 import { SessionStore } from './db/session-store.js';
 import { recoverOrphanedSessions, type RecoveryResult } from './recovery.js';
@@ -77,6 +78,7 @@ export class PersistentSessionManager extends EventEmitter<PersistentSessionMana
   private dbConnection: DatabaseConnection;
   private sessionStore: SessionStore;
   private outputStore: OutputStore;
+  private _orchestrationStore: OrchestrationStore;
   private sessionManager: SessionManager;
   private timeoutChecker: ReturnType<typeof setInterval> | null = null;
   private sessionTimeout: number;
@@ -88,6 +90,7 @@ export class PersistentSessionManager extends EventEmitter<PersistentSessionMana
     this.dbConnection = new DatabaseConnection(options?.dbPath);
     this.sessionStore = new SessionStore(this.dbConnection.db);
     this.outputStore = new OutputStore(this.dbConnection.db);
+    this._orchestrationStore = new OrchestrationStore(this.dbConnection.db);
 
     // Initialize inner session manager
     this.sessionManager = new SessionManager({
@@ -280,6 +283,13 @@ export class PersistentSessionManager extends EventEmitter<PersistentSessionMana
    */
   get availableSlotsCount(): number {
     return this.sessionManager.availableSlotsCount;
+  }
+
+  /**
+   * Gets the orchestration store for tracking plans and execution state.
+   */
+  get orchestrationStore(): OrchestrationStore {
+    return this._orchestrationStore;
   }
 
   /**

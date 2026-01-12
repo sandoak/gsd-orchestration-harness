@@ -6,50 +6,91 @@ Use this workflow when:
 - Managing planning, execution, and verification in parallel
 </trigger>
 
+<prerequisites>
+**IMPORTANT: The GSD Harness must be running before orchestration can begin.**
+
+The harness uses HTTP Streamable MCP transport and runs as a standalone server. It must be started manually:
+
+```bash
+# Start the harness (from the harness installation directory)
+cd ~/.gsd-harness && pnpm start
+
+# Or run in background:
+cd ~/.gsd-harness && nohup pnpm start > /tmp/gsd-harness.log 2>&1 &
+```
+
+The harness runs at:
+
+- **Dashboard**: http://localhost:3333
+- **MCP endpoint**: http://localhost:3333/mcp
+- **WebSocket**: ws://localhost:3333/ws
+
+Multiple Claude Code sessions can connect to the same running harness instance.
+</prerequisites>
+
 <purpose>
-Orchestrate the **complete GSD lifecycle** using 3 specialized parallel session slots.
+Orchestrate the **complete GSD lifecycle** using 4 specialized parallel session slots.
 
-The harness provides 3 purpose-specific slots:
+**⚠️ YOU ARE THE CONDUCTOR, NOT A MUSICIAN:**
 
-- **Slot 1 (Planning)**: Runs `/gsd:plan-phase X` - creates PLAN.md files
-- **Slot 2 (Execution)**: Runs `/gsd:execute-plan [path]` - builds the code
-- **Slot 3 (Verify)**: Runs verification tasks - tests, UAT, quality checks
+- You START sessions, you don't DO the work
+- You MONITOR progress, you don't WRITE code
+- You RESPOND to checkpoints, you don't EXECUTE plans
+- If you're about to edit a .tsx/.ts/.css file or run npm commands, STOP - that's the session's job
+
+The harness provides 4 parallel session slots (Slot 1-4). Any slot can run any task type.
+
+**Task Types (by priority):**
+
+1. **Verify** - `/gsd:verify-work` - Quality gate, must pass before next phase
+2. **Reconcile** - Review next plan against last execution's reality
+3. **Execute** - `/gsd:execute-plan [path]` - Build the code
+4. **Plan** - `/gsd:plan-phase X` - Create PLAN.md files
+5. **Admin** - Tests, builds, misc utility tasks
 
 Claude becomes the session coordinator—monitoring when sessions reach user prompts/hooks, responding to checkpoints, and keeping all slots productively busy.
 
-"Claude as the conductor of a parallel GSD symphony."
+"Claude as the conductor of a parallel GSD symphony." (Conductors don't play instruments!)
 </purpose>
 
 <slot_architecture>
 
 ```
-┌─────────────────────────────────────────────────────────────────────┐
-│  GSD ORCHESTRATION HARNESS - Parallel Slot Architecture            │
-├─────────────────────────────────────────────────────────────────────┤
-│                                                                      │
-│  SLOT 1: PLANNING          SLOT 2: EXECUTION        SLOT 3: VERIFY  │
-│  ┌─────────────────┐       ┌─────────────────┐      ┌─────────────┐ │
-│  │ /gsd:plan-phase │       │ /gsd:execute-   │      │ /gsd:verify │ │
-│  │                 │       │     plan        │      │   -work     │ │
-│  │ Creates PLAN.md │  ──►  │ Builds code     │  ──► │ Tests/UAT   │ │
-│  │ files           │       │ Creates SUMMARY │      │ Quality     │ │
-│  └─────────────────┘       └─────────────────┘      └─────────────┘ │
-│         │                          │                       │        │
-│         └──────────────────────────┴───────────────────────┘        │
-│                           PARALLEL EXECUTION                         │
-│  Phase 2 planning can run while Phase 1 executes and verifies       │
-│                                                                      │
-└─────────────────────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────────────────────────┐
+│  GSD ORCHESTRATION HARNESS - 4 Generic Parallel Slots                             │
+├──────────────────────────────────────────────────────────────────────────────────┤
+│                                                                                    │
+│  ┌─────────┐  ┌─────────┐  ┌─────────┐  ┌─────────┐                              │
+│  │ SLOT 1  │  │ SLOT 2  │  │ SLOT 3  │  │ SLOT 4  │                              │
+│  │         │  │         │  │         │  │         │                              │
+│  │ Any     │  │ Any     │  │ Any     │  │ Any     │                              │
+│  │ Task    │  │ Task    │  │ Task    │  │ Task    │                              │
+│  └─────────┘  └─────────┘  └─────────┘  └─────────┘                              │
+│                                                                                    │
+│  TASK PRIORITY (orchestrator assigns highest priority to free slots):            │
+│    1. VERIFY      - Quality gate, blocks next phase                              │
+│    2. RECONCILE   - Validate next plan against reality                           │
+│    3. EXECUTE     - Build the code                                               │
+│    4. PLAN        - Create PLAN.md files                                         │
+│    5. ADMIN       - Tests, builds, utilities                                     │
+│                                                                                    │
+└──────────────────────────────────────────────────────────────────────────────────┘
 ```
 
-**Parallel Pipeline Example:**
+**Pipeline with Verify Gates and Plan Reconciliation:**
 
 ```
 Time →
-Slot 1 (Plan):    [Plan P1]──────[Plan P2]──────[Plan P3]──────
-Slot 2 (Execute):        [Exec P1-01]──[Exec P1-02]──[Exec P2-01]──
-Slot 3 (Verify):                [Verify P1-01]──[Verify P1-02]──────
+Slot 1: [Plan P1]──────[Exec 01-01]──────[Reconcile 01-02]──────[Verify P1]──
+Slot 2:        [Plan P2]──────[Exec 01-02]──────[Reconcile 02-01]──────────
+Slot 3:               [Exec 02-01]──────[Exec 02-02]──────[Verify P2]──────
+Slot 4:                      [Admin]──────[Admin]──────[Admin]─────────────
 ```
+
+**Key Flow:**
+
+- Execute N → Reconcile N+1 plan → Execute N+1
+- Phase complete → VERIFY (must pass) → Unlock next phase planning
 
 </slot_architecture>
 
@@ -63,23 +104,64 @@ Before orchestrating, ensure context:
 
 <process>
 
+**⚠️ CRITICAL RULES - READ FIRST:**
+
+You are the ORCHESTRATOR, not the EXECUTOR. Your ONLY job is to:
+
+1. Start sessions via `gsd_start_session`
+2. Monitor sessions efficiently via `gsd_wait_for_state_change` (NOT polling!)
+3. Respond to checkpoints via `gsd_respond_checkpoint`
+
+**TASK PRIORITY (assign highest priority task to any free slot):**
+
+1. **VERIFY** - Must run after phase execution completes, blocks next phase
+2. **RECONCILE** - Must run after each execution, before next execution
+3. **EXECUTE** - Run planned work
+4. **PLAN** - Create plans (only if verify gate allows)
+5. **ADMIN** - Tests, builds, utilities
+
+**Why priority matters:** This prevents racing ahead without verification. The flow is:
+Execute → Reconcile next plan → Execute → ... → Verify phase → Unlock next phase
+
+You must NEVER:
+
+- Run npm install, npm build, or any build commands directly
+- Create/edit source files (_.tsx, _.ts, _.css, _.json)
+- Write SUMMARY.md or update STATE.md directly
+- Execute any plan tasks yourself
+- Skip verify - it's mandatory after each phase
+- Skip reconciliation - validate next plan before executing it
+- Reuse a session after it completes - ALWAYS start a fresh session
+
+ALL work happens in harness sessions. If you find yourself about to edit a source file or run a build command, STOP and start a harness session instead.
+
 <step name="check_harness_available">
 Verify harness MCP tools are accessible:
 
-Call `gsd_list_sessions` with no arguments.
+**IMPORTANT: Don't check .mcp.json files or look at tool lists. Just CALL the tool directly:**
 
-**If successful:** Response contains `slots` array with 3 entries.
-**If error:** Harness not running or MCP not configured.
+Use the MCP tool `mcp__gsd-harness__gsd_list_sessions` with no arguments.
+
+**If successful:** Response contains `sessions` array and `availableSlots` count. Proceed with orchestration.
+
+**If error:** The harness is not running. Tell the user to start it:
 
 ```
-⚠️ Harness not available
+The GSD Harness must be running before orchestration.
 
-The GSD Orchestration Harness MCP tools are not accessible.
+Start it with:
+  cd ~/.gsd-harness && pnpm start
 
-Run setup: curl -sSL https://raw.githubusercontent.com/sandoak/gsd-orchestration-harness/main/scripts/setup-gsd-harness.sh | bash
+Then retry /gsd:orchestrate
 ```
 
-Proceed only if harness is accessible.
+**DO NOT:**
+
+- Read .mcp.json files to check configuration
+- Assume tools are unavailable based on file inspection
+- Fall back to "manual orchestration" or "direct execution"
+
+**JUST TRY THE TOOL.** If it works, proceed. If it errors, ask user to start the harness.
 </step>
 
 <step name="load_project_context">
@@ -100,12 +182,16 @@ Extract:
 - Completed work (verified)
 
 Build work queues for each slot type.
+
+**IGNORE previous session history when loading harness state.**
+The `gsd_list_sessions` response may show previous failed sessions - these are IRRELEVANT.
+What matters is: Are slots available? Start fresh sessions regardless of failure history.
 </step>
 
 <step name="build_work_queues">
-**Build separate queues for each slot type:**
+**Build separate queues for each slot (slots are LOCKED to their purpose):**
 
-**Planning Queue (Slot 1):**
+**Planning Queue (Slot 1 ONLY):**
 
 ```
 [0] /gsd:plan-phase 1
@@ -114,7 +200,7 @@ Build work queues for each slot type.
 ...
 ```
 
-**Execution Queue (Slot 1):**
+**Execution Queue (Slot 2 ONLY):**
 
 ```
 [0] /gsd:execute-plan .planning/phases/01-xxx/01-01-PLAN.md
@@ -123,7 +209,7 @@ Build work queues for each slot type.
 ...
 ```
 
-**Verification Queue (Slot 2):**
+**Verification Queue (Slot 3 ONLY):**
 
 ```
 [0] /gsd:verify-work (after 01-01 executes)
@@ -153,12 +239,13 @@ Present current harness state:
 ║  GSD ORCHESTRATION HARNESS                                            ║
 ╠══════════════════════════════════════════════════════════════════════╣
 ║                                                                        ║
-║  PLANNING (Slot 1):   [state]  Phase 2 planning                       ║
-║  EXECUTION (Slot 2):  [state]  Phase 1 Plan 2 executing               ║
-║  VERIFY (Slot 3):     [state]  Phase 1 Plan 1 verifying               ║
+║  Slot 1: [state]  [task type] - [description]                         ║
+║  Slot 2: [state]  [task type] - [description]                         ║
+║  Slot 3: [state]  [task type] - [description]                         ║
+║  Slot 4: [state]  [task type] - [description]                         ║
 ║                                                                        ║
-║  Project: [project name]                                              ║
-║  Pipeline: Plan → Execute → Verify                                    ║
+║  Verified Phases: [1, 2]  |  Current: Phase 3                         ║
+║  Pipeline: Execute → Reconcile → Verify → Unlock next                 ║
 ║                                                                        ║
 ╚══════════════════════════════════════════════════════════════════════╝
 ```
@@ -207,13 +294,11 @@ The orchestrator MUST track:
 
 ```
 orchestrator_state = {
-  active_sessions: {
-    planning: { session_id, command, started_at } | null,
-    execution: { session_id, command, started_at } | null,
-    verify: { session_id, command, started_at } | null,
-  },
-  pending_start: Set<slot_type>,  // Slots where start was just called
-  last_poll: timestamp,
+  active_sessions: Map<slot_number, { session_id, task_type, command, started_at }>,
+  pending_start: Set<slot_number>,  // Slots where start was just called
+  verified_phases: Set<number>,     // Phases that passed verify (unlocks next phase)
+  last_execution: { plan_path, summary_path } | null,  // For reconciliation
+  reconciliation_done: boolean,     // Must be true before next execution
 }
 ```
 
@@ -269,86 +354,123 @@ if output == "" and session.status == "running":
 **Pre-loop setup:**
 
 - Initialize orchestrator_state tracking (see session_tracking step)
-- Set initial poll delay for new sessions: 10 seconds
+- NEVER poll repeatedly - use `gsd_wait_for_state_change` instead
 
-1. **Check all slot statuses:**
-   Call `gsd_list_sessions` to get current state of all 3 slots.
-   Update orchestrator_state.active_sessions based on response.
+**EFFICIENT MONITORING (CRITICAL - saves context!):**
 
-2. **Wait for new sessions to initialize:**
-   For any session started in the last 10 seconds:
-   - Skip output polling for now (CLI initializing)
-   - Mark as "initializing" in status display
+Instead of polling every 5-10 seconds (burns context!), use:
 
-3. **Check for sessions waiting for input:**
-   For each running slot (not initializing):
-   - Call `gsd_get_output(sessionId, lines=20)`
-   - If empty: Continue (may still be working)
-   - If has content: Look for prompt patterns (see detect_user_prompt)
-   - If waiting: Route to appropriate handler
+```
+gsd_wait_for_state_change(timeout=60000)
+```
 
-4. **Handle checkpoints:**
-   For slots in `waiting_checkpoint` state:
-   - Call `gsd_get_checkpoint(sessionId)`
-   - Route to checkpoint_handling step
-   - Respond and continue
+This tool BLOCKS until a session completes/fails, then returns immediately.
+One tool call replaces dozens of polling calls. Much more efficient!
 
-5. **Handle completed slots:**
-   When a slot completes:
-   - **Planning slot**: Refresh execution queue (new PLAN.md files)
-   - **Execution slot**: Refresh verification queue, add to verify queue
-   - **Verify slot**: Mark phase/plan as fully complete
-   - Clear from orchestrator_state.active_sessions
-   - Assign next work from appropriate queue
+**Loop structure:**
 
-6. **Handle failed slots:**
-   - Get output, analyze error
-   - Clear from orchestrator_state.active_sessions
-   - Offer: Retry, Skip, or Investigate
-   - See error_handling step
-
-7. **Assign work to idle slots (with duplicate prevention):**
+1. **Assign work to idle slots (PRIORITY ORDER):**
 
    **Before assigning ANY work:**
-   - Verify slot is not in orchestrator_state.pending_start
-   - Verify slot is not in orchestrator_state.active_sessions
-   - Check gsd_list_sessions confirms slot is idle
+   - Check slot is not in orchestrator_state.pending_start
+   - Check slot is not in orchestrator_state.active_sessions
+   - Call `gsd_list_sessions` to confirm slot is idle
 
-   **Slot 1 (Planning) idle:**
-   - Check planning queue
-   - Assign next phase that needs planning
-   - `gsd_start_session(workingDir, "/gsd:plan-phase X")`
-   - Record in orchestrator_state.active_sessions.planning
-   - Add to orchestrator_state.pending_start
+   **⚠️ PRIORITY ORDER - For each free slot, assign highest priority task:**
 
-   **Slot 2 (Execution) idle:**
-   - Check execution queue
-   - Assign next PLAN.md that needs execution
+   **PRIORITY 1: VERIFY (highest)**
+   If there's unverified completed phase work:
+   - `gsd_start_session(workingDir, "/gsd:verify-work [phase]")`
+   - **Verify MUST pass before unlocking next phase planning**
+
+   **PRIORITY 2: RECONCILE**
+   If execution just completed AND there's a next plan to execute:
+   - `gsd_start_session(workingDir, "Review [NEXT-PLAN.md] against [LAST-SUMMARY.md]. Update if APIs/paths/patterns changed.")`
+   - **Must complete before starting next execution**
+
+   **PRIORITY 3: EXECUTE**
+   If execution queue has work AND reconciliation done (or first execution):
    - `gsd_start_session(workingDir, "/gsd:execute-plan [path]")`
-   - Record in orchestrator_state.active_sessions.execution
-   - Add to orchestrator_state.pending_start
 
-   **Slot 3 (Verify) idle:**
-   - Check verification queue
-   - Assign next completed execution that needs verification
-   - `gsd_start_session(workingDir, "/gsd:verify-work")`
-   - Record in orchestrator_state.active_sessions.verify
-   - Add to orchestrator_state.pending_start
+   **PRIORITY 4: PLAN**
+   If planning queue has work:
+   - **CHECK VERIFY GATE:** Is previous phase verified?
+   - If NOT verified: DO NOT START PLANNING - wait for verify
+   - If verified (or first phase): `gsd_start_session(workingDir, "/gsd:plan-phase X")`
 
-8. **Refresh queues after completions:**
-   - After planning: Scan for new PLAN.md files
-   - After execution: Scan for new SUMMARY.md files
+   **PRIORITY 5: ADMIN (lowest)**
+   If no higher priority work and admin tasks needed:
+   - `gsd_start_session(workingDir, "npm test")` etc.
+
+   **WHY THIS ORDER:**
+   - Verify first ensures quality gates are enforced
+   - Reconcile second keeps plans aligned with reality
+   - Execute third builds the code
+   - Plan fourth respects verify gates (won't race ahead)
+   - Admin fills remaining time
+
+2. **Wait for state changes (EFFICIENT!):**
+
+   ```
+   result = gsd_wait_for_state_change(timeout=60000)
+   ```
+
+   - If result.change is null: timeout, check for checkpoints manually
+   - If result.change.type is "completed": handle completion
+   - If result.change.type is "failed": handle failure
+
+3. **Handle completed sessions:**
+   When a session completes:
+   - **Slot 1 (Plan)**: Refresh execution queue (new PLAN.md files available)
+   - **Slot 2 (Execute)**:
+     - Check if ALL plans in current phase are executed
+     - If YES: **IMMEDIATELY queue verify for this phase** (high priority!)
+     - Add verify to front of queue, not back
+   - **Slot 3 (Verify)**:
+     - Mark phase as verified in orchestrator_state.verified_phases
+     - **This unlocks planning for next phase**
+     - Log: "Phase N verified - unlocking Phase N+1 planning"
+   - **Slot 4 (Admin)**: Log result, continue
+   - Clear from orchestrator_state.active_sessions
+   - **NEVER reuse the session** - slot is now free for NEW work
+
+   **After execution completes, verify takes priority:**
+   If phase execution is complete and verify hasn't run → verify is NEXT, before more planning
+
+   **PLAN RECONCILIATION (Slot 4) - After each execution:**
+   Before starting the next execution, use Slot 4 to validate the next plan:
+
+   ```
+   gsd_start_session(workingDir, "Review [NEXT-PLAN.md] against [JUST-COMPLETED-SUMMARY.md].
+     Check if APIs, file paths, patterns, or assumptions in the plan still match reality.
+     Update the plan if anything changed. Be concise - only fix what's wrong.")
+   ```
+
+   This catches drift between plans and reality before it causes execution failures.
+
+4. **Handle failed sessions:**
+   - Get output via `gsd_get_output(sessionId, lines=100)`
+   - Clear from orchestrator_state.active_sessions
+   - Offer: Retry (start fresh session), Skip, or Investigate
+   - See error_handling step
+
+5. **Handle checkpoints (check every ~60 seconds):**
+   For each running session:
+   - Call `gsd_get_output(sessionId, lines=20)`
+   - Look for prompt patterns (see detect_user_prompt)
+   - If waiting for input: respond via `gsd_respond_checkpoint`
+
+6. **Refresh queues after completions:**
+   - After planning: Scan for new PLAN.md files → add to execution queue
+   - After execution: Scan for new SUMMARY.md files → add to verify queue
    - Update queues accordingly
 
-9. **Check if done:**
+7. **Check if done:**
    - All queues empty AND all slots idle: Complete
-   - Otherwise: Continue loop
+   - Otherwise: Go to step 1
 
-**Polling intervals:**
-
-- New sessions (< 10 seconds old): Skip output polling
-- Running sessions: Poll every 5-10 seconds
-- Use `gsd_list_sessions` to refresh slot states each iteration
+**NEVER reuse sessions:**
+When a session completes, that session is DONE. The slot becomes available for a NEW session with a NEW command. Do not type into a completed session's prompt.
 
 </step>
 
@@ -405,27 +527,94 @@ When a formal checkpoint is detected:
 3. Wait for "done": `gsd_respond_checkpoint(sessionId, "done")`
    </step>
 
+<step name="verify_gates">
+**CRITICAL: Verify is MANDATORY - Not Optional**
+
+The orchestrator MUST run verify after each phase's execution completes. Verify serves as:
+
+1. **Quality gate** - Catches bugs before they compound
+2. **Parallel safety net** - Catches issues from concurrent plan/execute
+3. **Synchronization point** - Ensures work is solid before advancing
+
+**VERIFY GATE RULES:**
+
+```
+PHASE LIFECYCLE (must follow this order):
+  Plan Phase N → Execute Phase N (all plans) → VERIFY Phase N → Plan Phase N+1
+
+VERIFY GATES:
+  ✗ Cannot start Plan Phase N+1 until Phase N is VERIFIED
+  ✗ Cannot skip verify - it's mandatory for each phase
+  ✓ Can plan Phase N while executing Phase N-1 (before verify)
+  ✓ Can execute Phase N plans in parallel with verify Phase N-1
+```
+
+**Track verified phases:**
+
+```
+orchestrator_state = {
+  ...existing fields...
+  verified_phases: Set<number>,  // Phases that passed verify
+  current_phase: number,         // Highest phase we can plan
+}
+```
+
+**Before planning Phase N+1:**
+
+1. Check: Is Phase N in verified_phases?
+2. If NO: Do not start planning N+1 - wait for verify
+3. If YES: Proceed with planning N+1
+
+**After phase execution completes:**
+
+1. All plans in phase executed? → IMMEDIATELY queue verify
+2. Verify takes priority over planning next phase
+3. Only after verify passes → unlock next phase planning
+
+**WHY THIS MATTERS:**
+Without verify gates, the orchestrator races ahead planning/executing while errors accumulate.
+By the time issues are discovered, there's a mountain of broken code to fix.
+Verify gates create checkpoints where we confirm "everything up to here works."
+</step>
+
 <step name="parallel_coordination">
-**Maximize parallelism while respecting dependencies:**
+**Maximize parallelism while respecting dependencies AND verify gates:**
 
 ```
 VALID PARALLEL STATES:
-✓ Plan Phase 2 + Execute Phase 1 + Verify Phase 1 earlier work
-✓ Plan Phase 3 + Execute Phase 2 + Verify Phase 1
-✓ All three slots working on different phases
+✓ Plan Phase N + Execute Phase N-1 + Verify Phase N-2
+✓ Execute Phase N + Verify Phase N-1 (while waiting for N verify)
+✓ Admin tasks run independently anytime
 
 INVALID (must wait):
 ✗ Execute Plan X before Plan X is created
 ✗ Verify Plan X before Plan X execution completes
-✗ Execute Phase N+1 before Phase N execution completes
+✗ Plan Phase N+1 before Phase N is VERIFIED ← NEW GATE
+✗ Skip verify entirely ← NEVER ALLOWED
 ```
 
-**Keep slots busy:**
+**Phase advancement requires verify:**
 
-- Don't let planning slot idle while execution/verify run
-- Start next phase planning as soon as current phase planning done
-- Pipeline work through slots for maximum throughput
-  </step>
+```
+Phase 1: Plan → Execute all → VERIFY ✓ → unlock Phase 2
+Phase 2: Plan → Execute all → VERIFY ✓ → unlock Phase 3
+...
+```
+
+**Keep slots busy (respecting priority order):**
+
+For each free slot, check task priority:
+
+1. Is there unverified phase work? → VERIFY
+2. Did execution just complete? → RECONCILE next plan
+3. Is reconciliation done and execution queued? → EXECUTE
+4. Is verify gate open for next phase? → PLAN
+5. Any admin tasks? → ADMIN
+
+**Verify is NOT optional:**
+If any slot is idle and there's unverified completed work, that slot runs VERIFY.
+Verify has highest priority because it's the quality gate.
+</step>
 
 <step name="progress_reporting">
 Periodically display overall progress:
@@ -462,26 +651,32 @@ Queued:
 <step name="error_handling">
 When a session fails:
 
+**IMPORTANT: Failures are expected during harness development. ALWAYS retry through the harness, NEVER fall back to direct execution.**
+
 1. Identify which slot/type failed (planning, execution, or verify)
 2. Get error context: `gsd_get_output(sessionId, lines=100)`
-3. Analyze and offer options:
+3. **Default action: RETRY through the harness**
+   - Start a fresh session with the same command
+   - Do NOT offer to "execute directly" - that defeats the purpose
+4. If retry fails 3 times, THEN offer options:
 
 ```
-[PLANNING/EXECUTION/VERIFY] FAILED
+[PLANNING/EXECUTION/VERIFY] FAILED (3 attempts)
 
 Slot: [1/2/3]
 Task: [what was being done]
 Error: [summary]
 
 Options:
-1. Retry - Start the task again
+1. Retry again - Start the task again
 2. Skip - Mark as failed, continue pipeline
-3. Investigate - Show full output
+3. Investigate - Show full output and report issue
 ```
 
-4. Handle based on choice
 5. Continue pipeline with other slots
-   </step>
+
+**NEVER offer "execute directly in this session" as an option. The user chose /gsd:orchestrate specifically to use the harness.**
+</step>
 
 <step name="completion">
 When all work is complete:
@@ -515,26 +710,38 @@ Quick reference for harness MCP tools:
 
 **gsd_list_sessions**
 
-- Purpose: Get status of all 3 session slots
-- Returns: `{ slots: [{ id, slot, state, projectPath, command }] }`
-- States: `idle`, `running`, `waiting_input`, `waiting_checkpoint`, `completed`, `failed`
+- Purpose: Get status of all 4 session slots
+- Returns: `{ sessions: [{ id, slot, status, workingDir, command }], availableSlots }`
+- States: `idle`, `running`, `waiting_checkpoint`, `completed`, `failed`
 
 **gsd_start_session**
 
 - Purpose: Start work in an available slot
 - Args: `workingDir`, `command`
-- Commands: `/gsd:plan-phase X`, `/gsd:execute-plan [path]`, `/gsd:verify-work`
+- Task types (any slot):
+  - Verify: `/gsd:verify-work [phase]`
+  - Reconcile: `"Review [PLAN.md] against [SUMMARY.md]..."`
+  - Execute: `/gsd:execute-plan [path]`
+  - Plan: `/gsd:plan-phase X`
+  - Admin: `npm test`, `npm build`, etc.
 
 **gsd_end_session**
 
 - Purpose: Terminate a session
 - Args: `sessionId`
 
+**gsd_wait_for_state_change** ⭐ NEW - USE THIS FOR MONITORING
+
+- Purpose: Wait efficiently for session state changes (replaces polling!)
+- Args: `timeout` (ms, default 30000), `sessionIds` (optional filter)
+- Returns: `{ change: { type, sessionId, slot }, session }` or `{ change: null }` on timeout
+- **Use this instead of polling gsd_get_output repeatedly!**
+
 **gsd_get_output**
 
-- Purpose: Get session output (monitor for prompts)
+- Purpose: Get session output (for checkpoint detection)
 - Args: `sessionId`, `lines`
-- Use: Detect user prompts, monitor progress
+- Use: Check for prompts/checkpoints AFTER wait_for_state_change times out
 
 **gsd_get_checkpoint**
 
@@ -546,8 +753,45 @@ Quick reference for harness MCP tools:
 
 - Purpose: Respond to checkpoint or prompt
 - Args: `sessionId`, `response`
+- **For selection prompts:** Send "1", "2", etc. or "\r" (Enter) to select
 - Use: Answer prompts, approve checkpoints, make decisions
-  </mcp_tool_reference>
+
+**gsd_sync_project_state** ⭐ CRITICAL - CALL AT STARTUP
+
+- Purpose: Sync project's `.planning/` state to harness database
+- Args: `projectPath` (absolute path)
+- Returns: `{ state, limits, plans }` - current execution state and limits
+- **MUST call at orchestration start** - initializes database from filesystem
+- Updates: `highestExecutedPhase`, `pendingVerifyPhase`, discovered plans
+- Harness uses this to enforce physical barriers
+
+</mcp_tool_reference>
+
+<physical_barriers>
+**HARNESS-ENFORCED LIMITS (Cannot be bypassed)**
+
+The harness physically blocks commands that violate these rules:
+
+1. **EXECUTION LIMIT**: Only 1 execute at a time
+   - Second execute request → BLOCKED with error
+   - Prevents: Codebase conflicts from parallel code changes
+
+2. **PLANNING LIMIT**: Max 2 phases ahead of execution
+   - `plan_phase > highest_executed + 2` → BLOCKED
+   - Prevents: Racing ahead without verification
+
+3. **VERIFY GATE**: No executes until pending verify completes
+   - If phase complete but not verified → executes BLOCKED
+   - Clears: When verify runs for the pending phase
+
+**Sync state at startup:**
+
+```
+gsd_sync_project_state(projectPath)
+→ Returns current limits and what's allowed
+```
+
+</physical_barriers>
 
 <usage_examples>
 
@@ -557,20 +801,23 @@ Quick reference for harness MCP tools:
 /gsd:orchestrate
 
 # Orchestrator:
-# 1. Checks harness - 3 slots available
+# 1. Checks harness - 4 slots available
 # 2. Builds queues - Phase 1 needs planning
-# 3. Assigns Slot 1: /gsd:plan-phase 1
-# 4. Monitors for completion
-# 5. When planning done: Assigns Slot 2 execution, Slot 1 next planning
-# 6. Pipeline runs until complete
+# 3. Assigns free slot: /gsd:plan-phase 1
+# 4. Uses gsd_wait_for_state_change to wait efficiently
+# 5. When planning done: Assigns execution to a free slot
+# 6. After execution: Reconciles next plan, then executes
+# 7. After phase complete: Runs verify (must pass to unlock next phase)
+# 8. Pipeline runs until complete - priority order enforced
 ```
 
-**Parallel pipeline in action:**
+**Pipeline with verify gates and reconciliation:**
 
 ```
-Slot 1: Plan Phase 1 → Plan Phase 2 → Plan Phase 3 → idle
-Slot 2: wait → Execute 01-01 → Execute 01-02 → Execute 02-01
-Slot 3: wait → wait → Verify 01-01 → Verify 01-02
+Slot 1: [Plan P1] → [Execute 01-01] → [Reconcile 01-02] → [Execute 01-02] → [Verify P1]
+Slot 2: [Plan P2] → [Execute 02-01] → [Reconcile 02-02] → idle
+Slot 3: [Admin] → [Execute 02-02] → [Verify P2] → idle
+Slot 4: [Admin] → [Admin] → [Admin]
 ```
 
 **Detecting and responding to prompt:**
@@ -593,9 +840,10 @@ gsd_respond_checkpoint("session-1", "1")
 <success_criteria>
 Orchestration succeeds when:
 
-- [ ] All phases planned (Slot 1 completed all planning)
-- [ ] All plans executed (Slot 2 completed all execution)
-- [ ] All work verified (Slot 3 completed all verification)
+- [ ] All phases planned
+- [ ] All plans reconciled (validated against reality before execution)
+- [ ] All plans executed
+- [ ] All phases verified (quality gates passed)
 - [ ] All checkpoints/prompts handled
 - [ ] No failed sessions (or failures acknowledged)
 - [ ] STATE.md updated with completion
@@ -603,27 +851,86 @@ Orchestration succeeds when:
 
 <guidelines>
 
+**CRITICAL - ALWAYS USE THE HARNESS:**
+
+The ENTIRE PURPOSE of /gsd:orchestrate is to use the parallel harness slots.
+You MUST NEVER "fall back" to direct execution in this session.
+
+- Previous failed sessions are IRRELEVANT - ignore them completely
+- Start fresh sessions regardless of failure history
+- If a session fails, RETRY it through the harness, don't do the work yourself
+- If sessions keep failing repeatedly, REPORT THE ISSUE to the user
+- NEVER say "Given harness instability, I'll execute directly" - that defeats the purpose
+
+The user invoked /gsd:orchestrate specifically to use parallel slot execution.
+If they wanted direct execution, they would use /gsd:execute-plan directly.
+
+**SESSION LIFECYCLE - END AND RESTART, DON'T REUSE:**
+
+When a session completes its work:
+
+1. **Call `gsd_end_session(sessionId)`** to terminate the completed session
+2. **Call `gsd_start_session(workingDir, newCommand)`** to start fresh work
+
+**NEVER:**
+
+- Type into a completed session's prompt (creates context bleed)
+- Send /clear to reuse an existing session (inconsistent behavior)
+- Assume the old session is ready for new work
+
+**Ending + restarting is more consistent because:**
+
+- Fresh context window for each task
+- No state from previous work bleeding over
+- Predictable behavior - each session does exactly one task
+- Harness properly tracks session lifecycle
+
+**CHECKPOINT/PROMPT RESPONSE FORMAT:**
+
+When a session shows a selection prompt like:
+
+```
+❯ 1. Yes, proceed
+  2. Adjust tasks
+  3. Start over
+Enter to select · ↑/↓ to navigate
+```
+
+Respond with:
+
+- `gsd_respond_checkpoint(sessionId, "1")` - Select option 1
+- `gsd_respond_checkpoint(sessionId, "\r")` - Press Enter (select highlighted)
+- `gsd_respond_checkpoint(sessionId, "y")` - For yes/no prompts
+
+**DO NOT** send the full option text. Just send the number or key.
+
 **DO:**
 
-- Use slots for their designated purposes (plan/execute/verify)
-- Monitor output frequently for user prompts
-- Keep pipeline flowing - start next work immediately when slot frees
-- Run slots in parallel when dependencies allow
-- Respond to prompts quickly to avoid blocking
+- Follow task priority: Verify → Reconcile → Execute → Plan → Admin
+- Use `gsd_wait_for_state_change` for efficient monitoring (not polling!)
+- END sessions when complete, START fresh sessions for new work
+- Run VERIFY after each phase completes (mandatory!)
+- Run RECONCILE before each execution (validate plan against reality)
+- Respond to prompts with simple inputs ("1", "y", "\r")
+- ALWAYS start new sessions through the harness, regardless of previous failures
 
 **DON'T:**
 
-- Mix purposes (don't execute in planning slot)
-- Wait for full phase completion before starting next phase planning
+- Skip verify - it's the quality gate between phases
+- Skip reconciliation - plans must match reality before execution
+- Reuse completed sessions - always end and start fresh
+- Poll repeatedly with gsd_get_output - use gsd_wait_for_state_change
+- Type commands into existing session prompts
+- Start planning Phase N+1 before Phase N is verified
 - Ignore sessions waiting for input
 - Let slots sit idle when there's queued work
-- Assume checkpoint is only way sessions wait for input
+- NEVER execute work directly in the orchestrator session
 
-**Parallel is the goal:**
+**Parallel is the goal (with quality gates):**
 
-- Always have all 3 slots busy when possible
-- Pipeline: Plan → Execute → Verify flows continuously
-- Different phases can be at different stages simultaneously
+- All 4 slots can be busy simultaneously with any task type
+- Priority order ensures verify and reconcile run when needed
+- Pipeline: Execute → Reconcile → Execute → ... → Verify → Unlock next phase
   </guidelines>
 
 <orphan_prevention>
@@ -639,9 +946,10 @@ The harness includes automatic orphan prevention mechanisms:
 
 **Orchestrator Responsibilities:**
 
-1. **Poll regularly**: Call `gsd_get_output` at least every 5-10 seconds to keep sessions alive
-2. **Clean exit**: Before stopping orchestration, call `gsd_end_session` for each running session
-3. **Handle errors**: If orchestrator crashes, harness will clean up on next restart
+1. **Use efficient monitoring**: Call `gsd_wait_for_state_change` instead of polling (keeps sessions alive via timeout)
+2. **End sessions properly**: Call `gsd_end_session` when a session completes, before starting new work
+3. **Clean exit**: Before stopping orchestration, call `gsd_end_session` for each running session
+4. **Handle errors**: If orchestrator crashes, harness will clean up on next restart
 
 **Dashboard Monitoring:**
 
