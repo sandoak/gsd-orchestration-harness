@@ -26,6 +26,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 4: Web Dashboard** - Real-time terminal dashboard with xterm.js (3/3 plans)
 - [x] **Phase 5: GSD Integration** - State parsing and checkpoint automation (3/3 plans)
 - [x] **Phase 6: E2E Integration** - Wire components, testing, and polish (3/3 plans)
+- [x] **Phase 7: Orchestration Skill** - /gsd:orchestrate command for harness-mode execution (1/1 plans)
 
 ## Phase Details
 
@@ -107,22 +108,35 @@ Plans:
 - [x] 06-02: End-to-end workflow testing (2026-01-12)
 - [x] 06-03: Documentation and usage examples (2026-01-12)
 
+### Phase 7: Orchestration Skill
+
+**Goal**: Create /gsd:orchestrate command that uses harness MCP tools to run GSD workflows in parallel sessions
+**Depends on**: Phase 6
+**Research**: Unlikely (building on existing MCP tools and GSD skill patterns)
+**Plans**: TBD
+
+Plans:
+
+- [x] 07-01: Orchestration skill workflow and documentation (2026-01-12)
+
 ## Progress
 
 **Execution Order:**
-Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6
+Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7
 
-| Phase                 | Plans Complete | Status   | Completed  |
-| --------------------- | -------------- | -------- | ---------- |
-| 1. Foundation         | 2/2            | Complete | 2026-01-12 |
-| 2. Session Management | 3/3            | Complete | 2026-01-12 |
-| 3. MCP Server         | 3/3            | Complete | 2026-01-12 |
-| 4. Web Dashboard      | 3/3            | Complete | 2026-01-12 |
-| 5. GSD Integration    | 3/3            | Complete | 2026-01-12 |
-| 6. E2E Integration    | 3/3            | Complete | 2026-01-12 |
+| Phase                  | Plans Complete | Status   | Completed  |
+| ---------------------- | -------------- | -------- | ---------- |
+| 1. Foundation          | 2/2            | Complete | 2026-01-12 |
+| 2. Session Management  | 3/3            | Complete | 2026-01-12 |
+| 3. MCP Server          | 3/3            | Complete | 2026-01-12 |
+| 4. Web Dashboard       | 3/3            | Complete | 2026-01-12 |
+| 5. GSD Integration     | 3/3            | Complete | 2026-01-12 |
+| 6. E2E Integration     | 3/3            | Complete | 2026-01-12 |
+| 7. Orchestration Skill | 1/1            | Complete | 2026-01-12 |
 
 ---
 
-**Project Complete: 2026-01-12** — v1.0 ready for use.
+**v1.0 Complete: 2026-01-12** — Core harness ready.
+**v1.1 Complete: 2026-01-12** — /gsd:orchestrate command added.
 
 _Created: 2026-01-11_
