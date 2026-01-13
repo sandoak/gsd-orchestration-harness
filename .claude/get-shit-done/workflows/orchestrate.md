@@ -205,6 +205,32 @@ What matters is: Are slots available? Start fresh sessions regardless of failure
 [0] /gsd:research-phase 2  (if research recommended for phase)
 ```
 
+**⚠️ RESEARCH DECISION - EVALUATE BEFORE EACH PHASE PLANNING:**
+
+Before adding a phase to the planning queue, explicitly evaluate:
+
+```
+RESEARCH CHECKLIST for Phase X:
+□ Is this phase technically complex? (new frameworks, unfamiliar APIs, integration points)
+□ Does ROADMAP.md mention unknowns or "needs investigation"?
+□ Will this phase touch external services or third-party systems?
+□ Is this the first time this type of work is being done in this project?
+□ Does the phase depend on decisions not yet made?
+
+IF ANY BOX CHECKED → Add to research queue FIRST: /gsd:research-phase X
+IF ALL BOXES UNCHECKED → Add directly to planning queue: /gsd:plan-phase X
+```
+
+**Document your decision:**
+
+```
+Phase 3 (@sandoak/utils): No research needed - standard utility functions, patterns established
+Phase 6 (@sandoak/ui): RESEARCH FIRST - new component library, need to evaluate shadcn patterns
+Phase 7 (@sandoak/email): RESEARCH FIRST - external service integration (Resend/SendGrid)
+```
+
+This prevents rushing into planning phases that have unknowns that could derail execution.
+
 **Execution Queue:**
 
 ```
@@ -455,24 +481,38 @@ One tool call replaces dozens of polling calls. Much more efficient!
    - Check `limits.maxExecutePhase` from sync - if phase ≤ maxExecutePhase, START IT
    - Only ONE execute at a time (harness enforces this)
 
-   **PRIORITY 4: PLAN (with optional RESEARCH)**
+   **PRIORITY 4: PLAN (with RESEARCH DECISION)**
    If planning queue has work:
    - **CHECK VERIFY GATE:** Is previous phase verified?
    - If NOT verified: DO NOT START PLANNING - wait for verify
-   - If verified (or first phase): `gsd_start_session(workingDir, "/gsd:plan-phase X")`
 
-   **RESEARCH BEFORE PLANNING:**
-   When a checkpoint suggests research before planning (e.g., "Research Phase X first"):
-   1. Run `/gsd:research-phase X` in a slot
+   **⚠️ BEFORE PLANNING - EVALUATE RESEARCH NEED:**
+
+   ```
+   For Phase X, check:
+   □ Technically complex? (new frameworks, unfamiliar APIs)
+   □ External services? (email, payments, auth providers)
+   □ Unknowns in ROADMAP.md?
+   □ First time doing this type of work?
+
+   ANY CHECKED → /gsd:research-phase X FIRST
+   ALL UNCHECKED → /gsd:plan-phase X directly
+   ```
+
+   **If research needed:**
+   1. `gsd_start_session(workingDir, "/gsd:research-phase X")`
    2. Wait for research to complete
-   3. Then run `/gsd:plan-phase X`
+   3. Then `gsd_start_session(workingDir, "/gsd:plan-phase X")`
+
+   **If no research needed:**
+   - `gsd_start_session(workingDir, "/gsd:plan-phase X")`
 
    Track research state:
 
    ```
    orchestrator_state.pending_research = {
      phase: 5,
-     reason: "Complex integrations need investigation"
+     reason: "External email service integration"
    } | null
    ```
 
