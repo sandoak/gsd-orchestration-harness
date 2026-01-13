@@ -1,3 +1,40 @@
+<!-- COMPACT-RESISTANT: These rules MUST survive context summarization -->
+
+<critical_rules>
+
+## ⚠️ ORCHESTRATOR CRITICAL RULES (Re-read if context compacted)
+
+**IF UNSURE, RE-READ THIS FILE:** `cat .claude/get-shit-done/workflows/orchestrate.md`
+
+### SESSION LIFECYCLE (Most Common Mistake)
+
+```
+✅ Session completes → gsd_end_session(id) → gsd_start_session(dir, newCmd)
+❌ Session completes → gsd_respond_checkpoint(id, "/gsd:...") ← NEVER DO THIS
+```
+
+- ONE task per session. End it. Start fresh.
+- `gsd_respond_checkpoint` is ONLY for: "1", "2", "y", "n", "\r"
+- NEVER type `/gsd:` commands into existing sessions
+
+### RESEARCH BEFORE PLANNING
+
+```
+Before /gsd:plan-phase X, check:
+□ Complex tech? □ External services? □ Unknowns? □ First time?
+ANY CHECKED → /gsd:research-phase X FIRST
+```
+
+### USE ALL 4 SLOTS
+
+- Don't let slots sit idle when work is queued
+- Start multiple sessions in parallel, don't chain sequentially
+
+### CONTEXT ROT CHECK
+
+Every 5 session completions, re-read this file to refresh instructions.
+</critical_rules>
+
 <trigger>
 Use this workflow when:
 - User invokes /gsd:orchestrate
