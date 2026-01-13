@@ -274,8 +274,20 @@ export class OrchestrationStore {
 
   /**
    * Check if a new execute can start (enforces verify gate).
+   *
+   * Verify gate only blocks progression to NEXT phase, not current phase executes.
+   * For example, if Phase 3 is pending verify:
+   * - Phase 4 executes: ALLOWED (one phase ahead)
+   * - Phase 5 executes: BLOCKED (must verify Phase 3 first, then Phase 4)
+   *
+   * @param projectPath - Project path
+   * @param targetPhase - Optional phase number being executed. If provided, only blocks
+   *                      if target is more than 1 phase ahead of pending verify.
    */
-  canStartExecute(projectPath: string): {
+  canStartExecute(
+    projectPath: string,
+    targetPhase?: number
+  ): {
     allowed: boolean;
     reason?: string;
     pendingPhase?: number;
@@ -283,9 +295,25 @@ export class OrchestrationStore {
     const state = this.getState(projectPath);
 
     if (state.pendingVerifyPhase !== null) {
+      // If we know the target phase, only block if it's more than 1 ahead
+      if (targetPhase !== undefined) {
+        // Allow executing one phase ahead of pending verify
+        // E.g., if Phase 3 pending verify, Phase 4 is OK, Phase 5 is blocked
+        if (targetPhase > state.pendingVerifyPhase + 1) {
+          return {
+            allowed: false,
+            reason: `Phase ${state.pendingVerifyPhase} must be verified before executing Phase ${targetPhase}. Current limit: Phase ${state.pendingVerifyPhase + 1}.`,
+            pendingPhase: state.pendingVerifyPhase,
+          };
+        }
+        // Target phase is within allowed range
+        return { allowed: true };
+      }
+
+      // If no target phase specified, be conservative and block
       return {
         allowed: false,
-        reason: `Phase ${state.pendingVerifyPhase} completed but not verified. Run verify before starting new executes.`,
+        reason: `Phase ${state.pendingVerifyPhase} completed but not verified. Specify target phase to check if allowed.`,
         pendingPhase: state.pendingVerifyPhase,
       };
     }

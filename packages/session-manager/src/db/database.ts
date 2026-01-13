@@ -7,7 +7,7 @@ import Database from 'better-sqlite3';
 const SCHEMA = `
 CREATE TABLE IF NOT EXISTS sessions (
   id TEXT PRIMARY KEY,
-  slot INTEGER NOT NULL CHECK (slot IN (1, 2, 3)),
+  slot INTEGER NOT NULL CHECK (slot IN (1, 2, 3, 4)),
   status TEXT NOT NULL CHECK (status IN ('idle', 'running', 'waiting_checkpoint', 'completed', 'failed')),
   working_dir TEXT NOT NULL,
   current_command TEXT,

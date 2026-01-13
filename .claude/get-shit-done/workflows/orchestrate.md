@@ -189,45 +189,67 @@ What matters is: Are slots available? Start fresh sessions regardless of failure
 </step>
 
 <step name="build_work_queues">
-**Build separate queues for each slot (slots are LOCKED to their purpose):**
+**Build queues by task type (any slot can run any task):**
 
-**Planning Queue (Slot 1 ONLY):**
+**Planning Queue:**
 
 ```
 [0] /gsd:plan-phase 1
 [1] /gsd:plan-phase 2
-[2] /gsd:plan-phase 3
 ...
 ```
 
-**Execution Queue (Slot 2 ONLY):**
+**Research Queue (check if needed before planning):**
+
+```
+[0] /gsd:research-phase 2  (if research recommended for phase)
+```
+
+**Execution Queue:**
 
 ```
 [0] /gsd:execute-plan .planning/phases/01-xxx/01-01-PLAN.md
 [1] /gsd:execute-plan .planning/phases/01-xxx/01-02-PLAN.md
-[2] /gsd:execute-plan .planning/phases/02-xxx/02-01-PLAN.md
 ...
 ```
 
-**Verification Queue (Slot 3 ONLY):**
+**Verification Queue:**
 
 ```
-[0] /gsd:verify-work (after 01-01 executes)
-[1] /gsd:verify-work (after 01-02 executes)
+[0] /gsd:verify-work (after phase completes)
 ...
+```
+
+**⚠️ STARTUP RECONCILIATION QUEUE (check at orchestration start):**
+
+At startup, scan for plans that need reconciliation:
+
+```
+For each pending PLAN.md (no SUMMARY.md):
+  - Find the previous plan in sequence (e.g., 05-01 before 05-02)
+  - If previous plan has SUMMARY.md → this plan needs reconcile
+  - Add to reconcile queue: "Review 05-02-PLAN.md against 05-01-SUMMARY.md"
+```
+
+Example at startup:
+
+```
+05-01-PLAN.md → 05-01-SUMMARY.md exists ✓ (executed)
+05-02-PLAN.md → no SUMMARY (pending) → NEEDS RECONCILE against 05-01-SUMMARY.md
+05-03-PLAN.md → no SUMMARY (pending) → will need reconcile after 05-02 executes
 ```
 
 **Queue Dependencies:**
 
+- Research runs before planning (if recommended)
 - Execution waits for planning to create PLAN.md
+- Reconcile runs before execution (if previous SUMMARY exists)
 - Verification waits for execution to create SUMMARY.md
-- Next phase planning can start once current phase is planned
-- Verification can run in parallel with next plan's execution
 
 **Dynamic Queue Updates:**
 
 - After planning completes: Add new execution items
-- After execution completes: Add new verification items
+- After execution completes: Add reconcile for next plan, then execution
 - Re-scan `.planning/phases/` after each session completes
   </step>
 
@@ -369,34 +391,90 @@ One tool call replaces dozens of polling calls. Much more efficient!
 
 **Loop structure:**
 
-1. **Assign work to idle slots (PRIORITY ORDER):**
+1. **Assign work to ALL idle slots IN PARALLEL:**
+
+   **⚠️ CRITICAL: START MULTIPLE SESSIONS AT ONCE!**
+
+   Don't just start ONE session then wait. Start sessions in ALL available slots:
+   - Slot 1 idle + verify needed → Start verify
+   - Slot 2 idle + execute allowed (phase ≤ maxExecutePhase) → Start execute
+   - Slot 3 idle + more execute work → Start another execute
+   - etc.
+
+   **Example with Phase 4 pending verify, maxExecutePhase=5:**
+
+   ```
+   Slot 1: Start /gsd:verify-work (Phase 4)
+   Slot 2: Start /gsd:execute-plan 05-01-PLAN.md (Phase 5 ≤ maxExecutePhase)
+   Slot 3: idle (only one execute at a time)
+   Slot 4: idle
+   ```
 
    **Before assigning ANY work:**
    - Check slot is not in orchestrator_state.pending_start
    - Check slot is not in orchestrator_state.active_sessions
    - Call `gsd_list_sessions` to confirm slot is idle
 
-   **⚠️ PRIORITY ORDER - For each free slot, assign highest priority task:**
+   **PRIORITY ORDER (for choosing WHICH task to assign to each slot):**
 
    **PRIORITY 1: VERIFY (highest)**
-   If there's unverified completed phase work:
+   If there's unverified completed phase work AND no verify session running:
    - `gsd_start_session(workingDir, "/gsd:verify-work [phase]")`
-   - **Verify MUST pass before unlocking next phase planning**
+   - Only ONE verify at a time
 
-   **PRIORITY 2: RECONCILE**
-   If execution just completed AND there's a next plan to execute:
-   - `gsd_start_session(workingDir, "Review [NEXT-PLAN.md] against [LAST-SUMMARY.md]. Update if APIs/paths/patterns changed.")`
-   - **Must complete before starting next execution**
+   **PRIORITY 2: RECONCILE (use 1 slot when execution completes)**
+
+   **⚠️ CRITICAL: After EVERY execution completes, reconcile the next plan!**
+
+   When an execute session completes:
+   1. Note which SUMMARY.md was just created (e.g., `05-01-SUMMARY.md`)
+   2. Find the next pending PLAN.md (e.g., `05-02-PLAN.md`)
+   3. Start a reconcile session in an open slot:
+
+   ```
+   gsd_start_session(workingDir, "Review .planning/phases/05-xxx/05-02-PLAN.md against the just-completed 05-01-SUMMARY.md. Check if any APIs, file paths, component names, or patterns in the plan need updating based on what was actually built. Make minimal targeted updates only - don't rewrite the plan.")
+   ```
+
+   **Reconcile runs in parallel** - while one slot reconciles, other slots can verify or wait.
+
+   Track reconciliation state:
+
+   ```
+   orchestrator_state.pending_reconcile = {
+     next_plan: "05-02-PLAN.md",
+     last_summary: "05-01-SUMMARY.md"
+   } | null
+   ```
+
+   Clear `pending_reconcile` when reconcile session completes.
 
    **PRIORITY 3: EXECUTE**
-   If execution queue has work AND reconciliation done (or first execution):
+   If execution queue has work AND plan's phase ≤ maxExecutePhase:
    - `gsd_start_session(workingDir, "/gsd:execute-plan [path]")`
+   - **Execute CAN and SHOULD run in parallel with verify!**
+   - Check `limits.maxExecutePhase` from sync - if phase ≤ maxExecutePhase, START IT
+   - Only ONE execute at a time (harness enforces this)
 
-   **PRIORITY 4: PLAN**
+   **PRIORITY 4: PLAN (with optional RESEARCH)**
    If planning queue has work:
    - **CHECK VERIFY GATE:** Is previous phase verified?
    - If NOT verified: DO NOT START PLANNING - wait for verify
    - If verified (or first phase): `gsd_start_session(workingDir, "/gsd:plan-phase X")`
+
+   **RESEARCH BEFORE PLANNING:**
+   When a checkpoint suggests research before planning (e.g., "Research Phase X first"):
+   1. Run `/gsd:research-phase X` in a slot
+   2. Wait for research to complete
+   3. Then run `/gsd:plan-phase X`
+
+   Track research state:
+
+   ```
+   orchestrator_state.pending_research = {
+     phase: 5,
+     reason: "Complex integrations need investigation"
+   } | null
+   ```
 
    **PRIORITY 5: ADMIN (lowest)**
    If no higher priority work and admin tasks needed:
@@ -406,7 +484,7 @@ One tool call replaces dozens of polling calls. Much more efficient!
    - Verify first ensures quality gates are enforced
    - Reconcile second keeps plans aligned with reality
    - Execute third builds the code
-   - Plan fourth respects verify gates (won't race ahead)
+   - Plan fourth (with research if needed) respects verify gates
    - Admin fills remaining time
 
 2. **Wait for state changes (EFFICIENT!):**
@@ -419,34 +497,44 @@ One tool call replaces dozens of polling calls. Much more efficient!
    - If result.change.type is "completed": handle completion
    - If result.change.type is "failed": handle failure
 
+   **⚠️ AFTER EVERY EVENT: IMMEDIATELY CHECK ALL SLOTS!**
+
+   After handling ANY event (completion, failure, checkpoint, timeout):
+   1. Call `gsd_list_sessions()` to see current slot status
+   2. For EVERY idle slot, assign work per priority order (step 1)
+   3. Don't wait - fill idle slots IMMEDIATELY before next wait_for_state_change
+
 3. **Handle completed sessions:**
    When a session completes:
-   - **Slot 1 (Plan)**: Refresh execution queue (new PLAN.md files available)
-   - **Slot 2 (Execute)**:
-     - Check if ALL plans in current phase are executed
-     - If YES: **IMMEDIATELY queue verify for this phase** (high priority!)
-     - Add verify to front of queue, not back
-   - **Slot 3 (Verify)**:
+   - **Plan session completes**: Refresh execution queue (new PLAN.md files available)
+   - **Execute session completes**: ⚠️ **TRIGGER RECONCILE IMMEDIATELY** (see below)
+   - **Verify session completes**:
      - Mark phase as verified in orchestrator_state.verified_phases
      - **This unlocks planning for next phase**
      - Log: "Phase N verified - unlocking Phase N+1 planning"
-   - **Slot 4 (Admin)**: Log result, continue
+   - **Reconcile session completes**: Clear pending_reconcile, next execute can start
+   - **Admin session completes**: Log result, continue
    - Clear from orchestrator_state.active_sessions
    - **NEVER reuse the session** - slot is now free for NEW work
 
-   **After execution completes, verify takes priority:**
-   If phase execution is complete and verify hasn't run → verify is NEXT, before more planning
+   **⚠️ CRITICAL: RECONCILE AFTER EVERY EXECUTION**
 
-   **PLAN RECONCILIATION (Slot 4) - After each execution:**
-   Before starting the next execution, use Slot 4 to validate the next plan:
+   When an execute session completes, this is MANDATORY before starting the next execute:
+   1. Identify what was just built (e.g., `05-01-SUMMARY.md`)
+   2. Identify the next pending plan (e.g., `05-02-PLAN.md`)
+   3. **IMMEDIATELY start reconcile in ANY available slot:**
 
    ```
-   gsd_start_session(workingDir, "Review [NEXT-PLAN.md] against [JUST-COMPLETED-SUMMARY.md].
-     Check if APIs, file paths, patterns, or assumptions in the plan still match reality.
-     Update the plan if anything changed. Be concise - only fix what's wrong.")
+   gsd_start_session(workingDir, "Review .planning/phases/05-xxx/05-02-PLAN.md against
+     the just-completed 05-01-SUMMARY.md. Check if any APIs, file paths, component names,
+     or patterns need updating based on what was actually built. Make minimal targeted
+     updates only - don't rewrite the plan.")
    ```
 
-   This catches drift between plans and reality before it causes execution failures.
+   4. Set: `orchestrator_state.pending_reconcile = { next_plan: "05-02-PLAN.md", last_summary: "05-01-SUMMARY.md" }`
+   5. **DO NOT start next execute until reconcile completes**
+
+   This prevents plans from drifting out of sync with the actual implementation.
 
 4. **Handle failed sessions:**
    - Get output via `gsd_get_output(sessionId, lines=100)`
@@ -796,15 +884,26 @@ The harness physically blocks commands that violate these rules:
    - `plan_phase > highest_executed + 2` → BLOCKED
    - Prevents: Racing ahead without verification
 
-3. **VERIFY GATE**: No executes until pending verify completes
-   - If phase complete but not verified → executes BLOCKED
-   - Clears: When verify runs for the pending phase
+3. **VERIFY GATE**: Limits how far ahead executes can go
+   - Check `limits.maxExecutePhase` in sync response
+   - If `maxExecutePhase: 5` → can execute phases 1-5, phase 6+ blocked
+   - If `maxExecutePhase: null` → no limit, all phases allowed
+   - **CRITICAL**: You CAN execute while verify runs! Check maxExecutePhase, not just pendingVerifyPhase
+
+**Example: Phase 4 pending verify, maxExecutePhase: 5**
+
+- ✅ Start verify for Phase 4
+- ✅ Start execute for 05-01 (phase 5 ≤ maxExecutePhase)
+- ✅ Start execute for 05-02 (phase 5 ≤ maxExecutePhase)
+- ❌ Cannot execute 06-01 (phase 6 > maxExecutePhase) until Phase 4 verified
 
 **Sync state at startup:**
 
 ```
 gsd_sync_project_state(projectPath)
-→ Returns current limits and what's allowed
+→ Returns: limits.maxExecutePhase (null = no limit, number = max phase allowed)
+→ Returns: limits.maxPlanPhase
+→ Returns: state.pendingVerifyPhase
 ```
 
 </physical_barriers>

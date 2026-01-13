@@ -65,7 +65,7 @@ export function SessionSlot({ slot, session }: SessionSlotProps) {
       <div className="flex h-full min-h-[200px] flex-col overflow-hidden rounded-lg border-2 border-dashed border-slate-600 bg-slate-800/50 p-4">
         <div className="mb-2 flex shrink-0 items-center justify-between">
           <span className="text-sm font-medium text-slate-400" title={slotInfo.description}>
-            {slotInfo.name} <span className="text-slate-500">(Slot {slot})</span>
+            {slotInfo.name}
           </span>
           <span className="rounded bg-slate-700 px-2 py-0.5 text-xs text-slate-400">Empty</span>
         </div>
@@ -86,7 +86,7 @@ export function SessionSlot({ slot, session }: SessionSlotProps) {
     >
       <div className="mb-2 flex shrink-0 items-center justify-between">
         <span className="text-sm font-medium text-slate-300" title={slotInfo.description}>
-          {slotInfo.name} <span className="text-slate-500">(Slot {slot})</span>
+          {slotInfo.name}
         </span>
         <div className="flex items-center gap-2">
           {/* Copy button */}

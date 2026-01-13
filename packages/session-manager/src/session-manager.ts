@@ -480,6 +480,20 @@ export class SessionManager extends EventEmitter<SessionManagerEvents> {
   }
 
   /**
+   * Gets the current wait state for a session (if any).
+   * Used by wait-for-state-change to check for already-waiting sessions.
+   * @param sessionId - ID of the session
+   * @returns Current wait state info or null if session not found or not waiting
+   */
+  getSessionWaitState(sessionId: string): { waitType: WaitStateType; trigger?: string } | null {
+    const managed = this.sessions.get(sessionId);
+    if (!managed || !managed.lastWaitState) {
+      return null;
+    }
+    return { waitType: managed.lastWaitState };
+  }
+
+  /**
    * Lists all active sessions.
    * @returns Array of all active sessions
    */

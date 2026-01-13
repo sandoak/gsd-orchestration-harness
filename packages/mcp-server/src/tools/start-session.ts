@@ -154,8 +154,11 @@ export function registerStartSessionTool(
         };
       }
 
-      // Check 2: Verify gate - no new executes if pending verify
-      const verifyCheck = orchestrationStore.canStartExecute(workingDir);
+      // Extract phase number for verify gate check
+      const phase = extractPhaseNumber(command);
+
+      // Check 2: Verify gate - check if this phase is allowed
+      const verifyCheck = orchestrationStore.canStartExecute(workingDir, phase ?? undefined);
       if (!verifyCheck.allowed) {
         console.log(`[mcp] BLOCKED: Verify gate - ${verifyCheck.reason}`);
         return {
@@ -179,7 +182,6 @@ export function registerStartSessionTool(
       }
 
       // Update in-memory tracking for legacy compatibility
-      const phase = extractPhaseNumber(command);
       if (phase !== null && phase > highestExecutedPhase) {
         highestExecutedPhase = phase;
         console.log(`[mcp] Updated highestExecutedPhase to ${highestExecutedPhase}`);

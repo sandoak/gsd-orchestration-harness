@@ -9,6 +9,7 @@ import type {
   SessionCompletedEvent,
   SessionFailedEvent,
   SessionWaitingEvent,
+  WaitStateType,
 } from '@gsd/core';
 
 import { DatabaseConnection } from './db/database.js';
@@ -235,6 +236,17 @@ export class PersistentSessionManager extends EventEmitter<PersistentSessionMana
 
     // Fall back to database for completed sessions
     return this.sessionStore.get(sessionId);
+  }
+
+  /**
+   * Gets the current wait state for a session (if any).
+   * Used by wait-for-state-change to check for already-waiting sessions.
+   *
+   * @param sessionId - ID of the session
+   * @returns Current wait state info or null if session not found or not waiting
+   */
+  getSessionWaitState(sessionId: string): { waitType: WaitStateType; trigger?: string } | null {
+    return this.sessionManager.getSessionWaitState(sessionId);
   }
 
   /**

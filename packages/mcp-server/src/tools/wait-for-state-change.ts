@@ -174,6 +174,9 @@ export function registerWaitForStateChangeTool(
 /**
  * Waits for a state change event on any of the watched sessions.
  * Returns when a session completes/fails/enters wait state or when timeout is reached.
+ *
+ * IMPORTANT: Checks for already-waiting sessions FIRST to avoid missing events
+ * that fired while handling previous responses.
  */
 function waitForChange(
   manager: PersistentSessionManager,
@@ -184,7 +187,62 @@ function waitForChange(
     const sessionIdSet = new Set(sessionIds);
     let resolved = false;
 
-    // Set up event listeners
+    // CRITICAL: Check for already-waiting sessions BEFORE setting up listeners
+    // This catches sessions that entered wait state while we were handling other responses
+    for (const sessionId of sessionIds) {
+      const waitState = manager.getSessionWaitState(sessionId);
+      if (waitState) {
+        console.log(
+          `[wait-for-state-change] Session ${sessionId} already in wait state: ${waitState.waitType}`
+        );
+        resolve({
+          type: 'waiting',
+          sessionId,
+          event: {
+            type: 'session:waiting',
+            timestamp: new Date(),
+            sessionId,
+            waitType: waitState.waitType,
+            trigger: waitState.trigger,
+          },
+        });
+        return;
+      }
+    }
+
+    // Check if any watched sessions have already completed/failed
+    for (const sessionId of sessionIds) {
+      const session = manager.getSession(sessionId);
+      if (session && (session.status === 'completed' || session.status === 'failed')) {
+        // Simulate the event for already-completed sessions
+        if (session.status === 'completed') {
+          resolve({
+            type: 'completed',
+            sessionId,
+            event: {
+              type: 'session:completed',
+              timestamp: session.endedAt || new Date(),
+              sessionId,
+              exitCode: 0,
+            },
+          });
+        } else {
+          resolve({
+            type: 'failed',
+            sessionId,
+            event: {
+              type: 'session:failed',
+              timestamp: session.endedAt || new Date(),
+              sessionId,
+              error: 'Session failed',
+            },
+          });
+        }
+        return;
+      }
+    }
+
+    // Set up event listeners for NEW state changes
     const onCompleted = (event: SessionCompletedEvent): void => {
       if (resolved) return;
       if (sessionIdSet.has(event.sessionId)) {
@@ -232,42 +290,5 @@ function waitForChange(
     manager.on('session:completed', onCompleted);
     manager.on('session:failed', onFailed);
     manager.on('session:waiting', onWaiting);
-
-    // Check if any watched sessions have already completed/failed
-    // (race condition protection)
-    for (const sessionId of sessionIds) {
-      const session = manager.getSession(sessionId);
-      if (session && (session.status === 'completed' || session.status === 'failed')) {
-        if (!resolved) {
-          resolved = true;
-          cleanup();
-          // Simulate the event for already-completed sessions
-          if (session.status === 'completed') {
-            resolve({
-              type: 'completed',
-              sessionId,
-              event: {
-                type: 'session:completed',
-                timestamp: session.endedAt || new Date(),
-                sessionId,
-                exitCode: 0,
-              },
-            });
-          } else {
-            resolve({
-              type: 'failed',
-              sessionId,
-              event: {
-                type: 'session:failed',
-                timestamp: session.endedAt || new Date(),
-                sessionId,
-                error: 'Session failed',
-              },
-            });
-          }
-        }
-        return;
-      }
-    }
   });
 }

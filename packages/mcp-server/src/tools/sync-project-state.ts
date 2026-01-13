@@ -226,7 +226,16 @@ export function registerSyncProjectStateTool(
       // Calculate limits
       const maxPlanPhase =
         newState.highestExecutedPhase === 0 ? 2 : newState.highestExecutedPhase + 2;
-      const canExecute = orchestrationStore.canStartExecute(projectPath);
+
+      // Calculate max execute phase based on verify gate
+      // If pendingVerifyPhase is set, can execute up to pendingVerifyPhase + 1
+      // Otherwise, no limit from verify gate
+      const maxExecutePhase =
+        newState.pendingVerifyPhase !== null ? newState.pendingVerifyPhase + 1 : null; // null means no limit
+
+      console.log(
+        `[sync] pendingVerifyPhase=${newState.pendingVerifyPhase}, maxExecutePhase=${maxExecutePhase}`
+      );
 
       return {
         content: [
@@ -247,8 +256,11 @@ export function registerSyncProjectStateTool(
               },
               limits: {
                 maxPlanPhase,
-                canStartExecute: canExecute.allowed,
-                executeBlockedReason: canExecute.reason || null,
+                maxExecutePhase, // null means no limit, number means max allowed phase
+                pendingVerifyBlocks:
+                  newState.pendingVerifyPhase !== null
+                    ? `Phase ${newState.pendingVerifyPhase} pending verify. Can execute up to Phase ${newState.pendingVerifyPhase + 1}.`
+                    : null,
               },
               plans: discoveredPlans.map((p) => ({
                 path: p.planPath,
