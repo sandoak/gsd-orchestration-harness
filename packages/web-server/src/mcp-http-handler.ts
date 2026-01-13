@@ -68,7 +68,7 @@ function createMcpServer(manager: PersistentSessionManager): McpServer {
   registerGetStateTool(server, manager);
   registerGetCheckpointTool(server, manager);
   registerRespondCheckpointTool(server, manager);
-  registerSetExecutionStateTool(server);
+  registerSetExecutionStateTool(server, manager.orchestrationStore);
   registerSyncProjectStateTool(server, manager.orchestrationStore);
   registerMarkPhaseVerifiedTool(server, manager.orchestrationStore);
   registerWaitForStateChangeTool(server, manager);

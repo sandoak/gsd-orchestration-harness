@@ -1,12 +1,14 @@
+import type { OrchestrationStore } from '@gsd/session-manager';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 
-import { setHighestExecutedPhase, getHighestExecutedPhase } from './start-session.js';
+import { setHighestExecutedPhase } from './start-session.js';
 
 /**
  * Schema for gsd_set_execution_state tool parameters.
  */
 const setExecutionStateSchema = {
+  projectPath: z.string().describe('Path to the project'),
   highestExecutedPhase: z
     .number()
     .int()
@@ -22,18 +24,33 @@ const setExecutionStateSchema = {
  * planning limits are enforced correctly even after harness restarts.
  *
  * @param server - The MCP server instance
+ * @param orchestrationStore - The orchestration store for database updates
  */
-export function registerSetExecutionStateTool(server: McpServer): void {
+export function registerSetExecutionStateTool(
+  server: McpServer,
+  orchestrationStore: OrchestrationStore
+): void {
   server.tool(
     'gsd_set_execution_state',
     setExecutionStateSchema,
-    async ({ highestExecutedPhase }) => {
+    async ({ projectPath, highestExecutedPhase }) => {
       console.log(
-        `[mcp] gsd_set_execution_state called - highestExecutedPhase: ${highestExecutedPhase}`
+        `[mcp] gsd_set_execution_state called - projectPath: ${projectPath}, highestExecutedPhase: ${highestExecutedPhase}`
       );
 
-      const previousPhase = getHighestExecutedPhase();
+      // Get previous state from database
+      const previousState = orchestrationStore.getState(projectPath);
+      const previousPhase = previousState.highestExecutedPhase;
+
+      // Update in-memory state (legacy compatibility)
       setHighestExecutedPhase(highestExecutedPhase);
+
+      // Update database state (this is what canStartPlan actually reads)
+      orchestrationStore.updateState(projectPath, { highestExecutedPhase });
+
+      console.log(
+        `[mcp] highestExecutedPhase updated: ${previousPhase} -> ${highestExecutedPhase} (in DB and memory)`
+      );
 
       return {
         content: [

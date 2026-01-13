@@ -869,6 +869,13 @@ Quick reference for harness MCP tools:
 - Updates: `highestExecutedPhase`, `pendingVerifyPhase`, discovered plans
 - Harness uses this to enforce physical barriers
 
+**gsd_set_execution_state** ⭐ USE TO FIX STALE STATE
+
+- Purpose: Manually set highest executed phase when database is out of sync
+- Args: `projectPath` (absolute path), `highestExecutedPhase` (number)
+- Use when: Planning limit errors persist after sync_project_state
+- Example: `gsd_set_execution_state(projectPath, 5)` → allows planning up to phase 7
+
 </mcp_tool_reference>
 
 <physical_barriers>
