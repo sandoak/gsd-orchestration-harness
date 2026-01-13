@@ -506,6 +506,14 @@ One tool call replaces dozens of polling calls. Much more efficient!
 
 3. **Handle completed sessions:**
    When a session completes:
+
+   **⚠️ FIRST: Always end the completed session:**
+
+   ```
+   gsd_end_session(completedSessionId)  ← DO THIS IMMEDIATELY
+   ```
+
+   **THEN handle by type:**
    - **Plan session completes**: Refresh execution queue (new PLAN.md files available)
    - **Execute session completes**: ⚠️ **TRIGGER RECONCILE IMMEDIATELY** (see below)
    - **Verify session completes**:
@@ -514,8 +522,16 @@ One tool call replaces dozens of polling calls. Much more efficient!
      - Log: "Phase N verified - unlocking Phase N+1 planning"
    - **Reconcile session completes**: Clear pending_reconcile, next execute can start
    - **Admin session completes**: Log result, continue
-   - Clear from orchestrator_state.active_sessions
-   - **NEVER reuse the session** - slot is now free for NEW work
+
+   **THEN start new work in the now-free slot:**
+
+   ```
+   gsd_start_session(workingDir, nextCommand)  ← FRESH SESSION
+   ```
+
+   Clear from orchestrator_state.active_sessions.
+
+   **❌ NEVER type into a completed session's prompt - ALWAYS end + start fresh!**
 
    **⚠️ CRITICAL: RECONCILE AFTER EVERY EXECUTION**
 
@@ -557,8 +573,17 @@ One tool call replaces dozens of polling calls. Much more efficient!
    - All queues empty AND all slots idle: Complete
    - Otherwise: Go to step 1
 
-**NEVER reuse sessions:**
-When a session completes, that session is DONE. The slot becomes available for a NEW session with a NEW command. Do not type into a completed session's prompt.
+**⚠️ SESSION REUSE IS THE #1 MISTAKE - DON'T DO IT:**
+
+```
+❌ WRONG: Session completes → type new command into prompt
+✅ RIGHT: Session completes → gsd_end_session → gsd_start_session with new command
+```
+
+When execute-plan finishes and shows "What next?":
+
+- **WRONG**: `gsd_respond_checkpoint(id, "/gsd:execute-plan 01-02...")`
+- **RIGHT**: `gsd_end_session(id)` then `gsd_start_session(dir, "/gsd:execute-plan 01-02...")`
 
 </step>
 
@@ -987,25 +1012,57 @@ You MUST NEVER "fall back" to direct execution in this session.
 The user invoked /gsd:orchestrate specifically to use parallel slot execution.
 If they wanted direct execution, they would use /gsd:execute-plan directly.
 
-**SESSION LIFECYCLE - END AND RESTART, DON'T REUSE:**
+**⚠️ CRITICAL: SESSION LIFECYCLE - ONE TASK PER SESSION**
 
-When a session completes its work:
+**THE RULE:** Each session does exactly ONE task. When it completes, END IT and START A NEW SESSION.
 
-1. **Call `gsd_end_session(sessionId)`** to terminate the completed session
-2. **Call `gsd_start_session(workingDir, newCommand)`** to start fresh work
+```
+✅ CORRECT FLOW:
+   gsd_start_session(workingDir, "/gsd:execute-plan 01-01-PLAN.md")
+   ... session completes ...
+   gsd_end_session(sessionId)
+   gsd_start_session(workingDir, "/gsd:execute-plan 01-02-PLAN.md")  ← NEW SESSION
 
-**NEVER:**
+❌ WRONG - NEVER DO THIS:
+   gsd_start_session(workingDir, "/gsd:execute-plan 01-01-PLAN.md")
+   ... session completes, shows prompt ...
+   gsd_respond_checkpoint(sessionId, "/gsd:execute-plan 01-02-PLAN.md")  ← WRONG!
+```
 
-- Type into a completed session's prompt (creates context bleed)
-- Send /clear to reuse an existing session (inconsistent behavior)
-- Assume the old session is ready for new work
+**`gsd_respond_checkpoint` is ONLY for:**
 
-**Ending + restarting is more consistent because:**
+- Answering yes/no questions: `"y"`, `"n"`, `"1"`, `"2"`
+- Selecting menu options: `"1"`, `"2"`, `"3"`
+- Pressing enter: `"\r"`
 
-- Fresh context window for each task
-- No state from previous work bleeding over
-- Predictable behavior - each session does exactly one task
-- Harness properly tracks session lifecycle
+**`gsd_respond_checkpoint` is NEVER for:**
+
+- Typing new `/gsd:` commands
+- Starting new work in an existing session
+- Continuing to a different task
+
+**WHY THIS MATTERS:**
+
+- Session reuse causes context pollution (task 2 sees task 1's full context)
+- Wastes tokens (context grows instead of starting fresh)
+- Prevents parallelism (could use 4 slots but you're using 1)
+- Creates unpredictable behavior
+
+**PARALLEL EXECUTION EXAMPLE:**
+
+```
+WRONG (sequential reuse - wastes slots):
+  Slot 1: [Exec 01-01] → type 01-02 → type 01-03 → type 01-04 → type 01-05
+  Slot 2: idle
+  Slot 3: idle
+  Slot 4: idle
+
+CORRECT (parallel fresh sessions):
+  Slot 1: [Exec 01-01] END → [Exec 01-03] END → [Verify P1]
+  Slot 2: [Exec 01-02] END → [Exec 01-04] END
+  Slot 3: [Exec 01-05] END → [Plan P2]
+  Slot 4: [Plan P2] END → [Plan P3]
+```
 
 **CHECKPOINT/PROMPT RESPONSE FORMAT:**
 
@@ -1025,6 +1082,18 @@ Respond with:
 - `gsd_respond_checkpoint(sessionId, "y")` - For yes/no prompts
 
 **DO NOT** send the full option text. Just send the number or key.
+
+**When session shows completion prompt (task done):**
+
+```
+✓ Execution complete
+❯ What would you like to do next?
+```
+
+**DO NOT type a new command!** Instead:
+
+1. `gsd_end_session(sessionId)` - End this session
+2. `gsd_start_session(workingDir, nextCommand)` - Start fresh session
 
 **DO:**
 
