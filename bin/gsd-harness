@@ -1,0 +1,258 @@
+#!/bin/bash
+#
+# GSD Harness CLI - Manage the orchestration harness
+#
+# Commands:
+#   setup     - First-time setup (install deps, configure MCP, start service)
+#   update    - Pull latest from GitHub, rebuild, restart service
+#   start     - Start the harness service
+#   stop      - Stop the harness service
+#   restart   - Restart the harness service
+#   status    - Show harness status and active projects
+#   logs      - Show harness logs
+#   projects  - List active projects and sessions
+#
+
+set -e
+
+# Colors
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+NC='\033[0m'
+
+# Configuration
+HARNESS_DIR="${GSD_HARNESS_DIR:-$HOME/.gsd-harness}"
+HARNESS_PORT="${GSD_HARNESS_PORT:-3333}"
+
+log_info() { echo -e "${BLUE}[INFO]${NC} $1"; }
+log_success() { echo -e "${GREEN}[OK]${NC} $1"; }
+log_warn() { echo -e "${YELLOW}[WARN]${NC} $1"; }
+log_error() { echo -e "${RED}[ERROR]${NC} $1"; }
+
+# Detect OS
+detect_os() {
+  case "$(uname -s)" in
+    Linux*)   echo "linux";;
+    Darwin*)  echo "macos";;
+    *)        echo "unknown";;
+  esac
+}
+
+# Check if harness is running
+is_running() {
+  curl -s "http://localhost:$HARNESS_PORT/health" >/dev/null 2>&1
+}
+
+# Command: setup
+cmd_setup() {
+  if [ -f "$HARNESS_DIR/scripts/setup-machine.sh" ]; then
+    exec "$HARNESS_DIR/scripts/setup-machine.sh"
+  else
+    log_error "Setup script not found at $HARNESS_DIR/scripts/setup-machine.sh"
+    log_info "Clone the repo first: gh repo clone sandoak/gsd-orchestration-harness $HARNESS_DIR"
+    exit 1
+  fi
+}
+
+# Command: update
+cmd_update() {
+  log_info "Updating GSD Harness from GitHub..."
+
+  cd "$HARNESS_DIR"
+
+  # Check for uncommitted changes
+  if ! git diff --quiet 2>/dev/null; then
+    log_warn "Uncommitted changes detected - stashing..."
+    git stash
+  fi
+
+  # Pull latest
+  log_info "Pulling latest changes..."
+  git pull --ff-only
+
+  # Rebuild
+  log_info "Installing dependencies..."
+  pnpm install
+
+  log_info "Building..."
+  pnpm build
+
+  # Restart service
+  log_info "Restarting service..."
+  cmd_restart
+
+  log_success "Update complete!"
+  echo ""
+  echo "Dashboard:  http://localhost:$HARNESS_PORT"
+  echo "MCP:        http://localhost:$HARNESS_PORT/mcp"
+}
+
+# Command: start
+cmd_start() {
+  OS=$(detect_os)
+
+  if is_running; then
+    log_warn "Harness is already running"
+    return 0
+  fi
+
+  log_info "Starting harness..."
+
+  case "$OS" in
+    linux)
+      systemctl --user start gsd-harness
+      ;;
+    macos)
+      launchctl load ~/Library/LaunchAgents/com.sandoak.gsd-harness.plist 2>/dev/null || true
+      ;;
+    *)
+      log_error "Unsupported OS: $OS"
+      log_info "Start manually: node $HARNESS_DIR/packages/harness/dist/index.js"
+      exit 1
+      ;;
+  esac
+
+  # Wait for startup
+  sleep 2
+
+  if is_running; then
+    log_success "Harness started"
+  else
+    log_error "Harness failed to start - check logs"
+    exit 1
+  fi
+}
+
+# Command: stop
+cmd_stop() {
+  OS=$(detect_os)
+
+  if ! is_running; then
+    log_warn "Harness is not running"
+    return 0
+  fi
+
+  log_info "Stopping harness..."
+
+  case "$OS" in
+    linux)
+      systemctl --user stop gsd-harness
+      ;;
+    macos)
+      launchctl unload ~/Library/LaunchAgents/com.sandoak.gsd-harness.plist 2>/dev/null || true
+      ;;
+    *)
+      # Try to kill by port
+      lsof -ti:$HARNESS_PORT | xargs kill -9 2>/dev/null || true
+      ;;
+  esac
+
+  log_success "Harness stopped"
+}
+
+# Command: restart
+cmd_restart() {
+  cmd_stop
+  sleep 1
+  cmd_start
+}
+
+# Command: status
+cmd_status() {
+  echo ""
+  echo "╔════════════════════════════════════════════════════════════╗"
+  echo "║              GSD Harness Status                            ║"
+  echo "╚════════════════════════════════════════════════════════════╝"
+  echo ""
+
+  if is_running; then
+    echo -e "Status:     ${GREEN}Running${NC}"
+    echo "Dashboard:  http://localhost:$HARNESS_PORT"
+    echo "MCP:        http://localhost:$HARNESS_PORT/mcp"
+    echo ""
+
+    # Get active projects
+    PROJECTS=$(curl -s "http://localhost:$HARNESS_PORT/api/projects" 2>/dev/null || echo "{}")
+    if [ "$PROJECTS" != "{}" ] && [ -n "$PROJECTS" ]; then
+      echo "Active Projects:"
+      echo "$PROJECTS" | jq -r '.projects[]? | "  - \(.path) (\(.activeSessions) sessions)"' 2>/dev/null || echo "  (none)"
+    else
+      echo "Active Projects: (none)"
+    fi
+  else
+    echo -e "Status:     ${RED}Stopped${NC}"
+    echo ""
+    echo "Start with: gsd-harness start"
+  fi
+  echo ""
+}
+
+# Command: logs
+cmd_logs() {
+  OS=$(detect_os)
+
+  case "$OS" in
+    linux)
+      journalctl --user -u gsd-harness -f
+      ;;
+    macos)
+      tail -f "$HARNESS_DIR/logs/"*.log 2>/dev/null || log_error "No log files found"
+      ;;
+    *)
+      log_error "Logs not available on $OS"
+      exit 1
+      ;;
+  esac
+}
+
+# Command: projects
+cmd_projects() {
+  if ! is_running; then
+    log_error "Harness is not running"
+    exit 1
+  fi
+
+  curl -s "http://localhost:$HARNESS_PORT/api/projects" | jq .
+}
+
+# Command: help
+cmd_help() {
+  echo "GSD Harness CLI"
+  echo ""
+  echo "Usage: gsd-harness <command>"
+  echo ""
+  echo "Commands:"
+  echo "  setup     First-time setup (install deps, configure MCP, start service)"
+  echo "  update    Pull latest from GitHub, rebuild, restart service"
+  echo "  start     Start the harness service"
+  echo "  stop      Stop the harness service"
+  echo "  restart   Restart the harness service"
+  echo "  status    Show harness status and active projects"
+  echo "  logs      Show harness logs (streaming)"
+  echo "  projects  List active projects and sessions (JSON)"
+  echo "  help      Show this help message"
+  echo ""
+  echo "Environment:"
+  echo "  GSD_HARNESS_DIR   Installation directory (default: ~/.gsd-harness)"
+  echo "  GSD_HARNESS_PORT  Server port (default: 3333)"
+}
+
+# Main
+case "${1:-help}" in
+  setup)    cmd_setup ;;
+  update)   cmd_update ;;
+  start)    cmd_start ;;
+  stop)     cmd_stop ;;
+  restart)  cmd_restart ;;
+  status)   cmd_status ;;
+  logs)     cmd_logs ;;
+  projects) cmd_projects ;;
+  help|--help|-h) cmd_help ;;
+  *)
+    log_error "Unknown command: $1"
+    cmd_help
+    exit 1
+    ;;
+esac

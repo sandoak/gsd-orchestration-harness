@@ -151,6 +151,61 @@ export class HarnessServer {
         output: lastLines,
       };
     });
+
+    // GET /api/projects - list active projects grouped by working directory
+    this.httpServer.app.get('/api/projects', async () => {
+      const sessions = this.manager.listSessions();
+
+      // Group sessions by workingDir
+      const projectMap = new Map<
+        string,
+        {
+          path: string;
+          activeSessions: number;
+          runningSessions: number;
+          sessions: Array<{
+            id: string;
+            slot: number;
+            status: string;
+            command: string | undefined;
+          }>;
+        }
+      >();
+
+      for (const session of sessions) {
+        const path = session.workingDir;
+        const existing = projectMap.get(path);
+
+        const sessionInfo = {
+          id: session.id,
+          slot: session.slot,
+          status: session.status,
+          command: session.currentCommand,
+        };
+
+        if (existing) {
+          existing.activeSessions++;
+          if (session.status === 'running' || session.status === 'waiting_checkpoint') {
+            existing.runningSessions++;
+          }
+          existing.sessions.push(sessionInfo);
+        } else {
+          projectMap.set(path, {
+            path,
+            activeSessions: 1,
+            runningSessions:
+              session.status === 'running' || session.status === 'waiting_checkpoint' ? 1 : 0,
+            sessions: [sessionInfo],
+          });
+        }
+      }
+
+      return {
+        projects: Array.from(projectMap.values()),
+        totalProjects: projectMap.size,
+        totalSessions: sessions.length,
+      };
+    });
   }
 
   /**

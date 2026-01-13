@@ -362,6 +362,35 @@ setup_data_dir() {
   log_success "Data directory ready at $DATA_DIR"
 }
 
+# Install CLI to PATH
+install_cli() {
+  log_info "Installing gsd-harness CLI..."
+
+  # Create ~/.local/bin if it doesn't exist
+  LOCAL_BIN="$HOME/.local/bin"
+  mkdir -p "$LOCAL_BIN"
+
+  # Create symlink
+  CLI_SOURCE="$HARNESS_DIR/bin/gsd-harness"
+  CLI_TARGET="$LOCAL_BIN/gsd-harness"
+
+  if [ -L "$CLI_TARGET" ] || [ -f "$CLI_TARGET" ]; then
+    rm -f "$CLI_TARGET"
+  fi
+
+  ln -s "$CLI_SOURCE" "$CLI_TARGET"
+  log_success "CLI installed at $CLI_TARGET"
+
+  # Check if ~/.local/bin is in PATH
+  if [[ ":$PATH:" != *":$LOCAL_BIN:"* ]]; then
+    log_warn "$LOCAL_BIN is not in your PATH"
+    echo ""
+    echo "Add to your shell profile (~/.bashrc, ~/.zshrc, etc.):"
+    echo "  export PATH=\"\$HOME/.local/bin:\$PATH\""
+    echo ""
+  fi
+}
+
 # Main
 main() {
   echo ""
@@ -394,6 +423,7 @@ main() {
   install_harness
   setup_data_dir
   build_harness
+  install_cli
   configure_mcp
   setup_service
 
@@ -407,8 +437,11 @@ main() {
   echo "Dashboard:  http://localhost:$HARNESS_PORT"
   echo "MCP:        http://localhost:$HARNESS_PORT/mcp"
   echo ""
-  echo "To update later, run:"
-  echo "  ~/.gsd-harness/scripts/setup-machine.sh"
+  echo "CLI Commands:"
+  echo "  gsd-harness status   - Show harness status"
+  echo "  gsd-harness update   - Pull latest and rebuild"
+  echo "  gsd-harness logs     - View harness logs"
+  echo "  gsd-harness help     - Show all commands"
   echo ""
 }
 
