@@ -11,6 +11,7 @@
 #   status    - Show harness status and active projects
 #   logs      - Show harness logs
 #   projects  - List active projects and sessions
+#   init      - Initialize GSD workflows in a project directory
 #
 
 set -e
@@ -217,6 +218,80 @@ cmd_projects() {
   curl -s "http://localhost:$HARNESS_PORT/api/projects" | jq .
 }
 
+# Command: init - Initialize GSD workflows in a project
+cmd_init() {
+  PROJECT_DIR="${2:-$(pwd)}"
+  GSD_SOURCE="$HARNESS_DIR/.claude/get-shit-done"
+  GSD_TARGET="$PROJECT_DIR/.claude/get-shit-done"
+
+  # Verify harness is installed
+  if [ ! -d "$GSD_SOURCE" ]; then
+    log_error "GSD workflows not found at $GSD_SOURCE"
+    log_info "Run 'gsd-harness setup' first to install the harness"
+    exit 1
+  fi
+
+  # Verify target is a valid project directory
+  if [ ! -d "$PROJECT_DIR" ]; then
+    log_error "Project directory does not exist: $PROJECT_DIR"
+    exit 1
+  fi
+
+  log_info "Initializing GSD workflows in: $PROJECT_DIR"
+
+  # Create .claude directory if needed
+  mkdir -p "$PROJECT_DIR/.claude"
+
+  # Check if get-shit-done already exists
+  if [ -d "$GSD_TARGET" ]; then
+    log_warn "GSD workflows already exist at $GSD_TARGET"
+    echo ""
+    echo "Options:"
+    echo "  1) Update - Copy missing files, skip existing"
+    echo "  2) Replace - Remove existing and copy fresh"
+    echo "  3) Cancel"
+    echo ""
+    read -p "Choose [1/2/3]: " CHOICE
+
+    case "$CHOICE" in
+      1)
+        log_info "Updating (copying missing files)..."
+        cp -rn "$GSD_SOURCE" "$PROJECT_DIR/.claude/" 2>/dev/null || true
+        ;;
+      2)
+        log_info "Replacing existing workflows..."
+        rm -rf "$GSD_TARGET"
+        cp -r "$GSD_SOURCE" "$PROJECT_DIR/.claude/"
+        ;;
+      *)
+        log_info "Cancelled"
+        exit 0
+        ;;
+    esac
+  else
+    # Fresh copy
+    cp -r "$GSD_SOURCE" "$PROJECT_DIR/.claude/"
+  fi
+
+  # Count files copied
+  FILE_COUNT=$(find "$GSD_TARGET" -type f | wc -l | tr -d ' ')
+
+  log_success "GSD workflows initialized ($FILE_COUNT files)"
+  echo ""
+  echo "Workflows available at: $GSD_TARGET"
+  echo ""
+  echo "Key files:"
+  echo "  - workflows/orchestrate.md   - Parallel execution orchestration"
+  echo "  - workflows/execute-phase.md - Phase execution workflow"
+  echo "  - workflows/plan-phase.md    - Phase planning workflow"
+  echo "  - templates/                 - Project document templates"
+  echo ""
+  echo "To start using GSD in this project:"
+  echo "  1. Start Claude Code in the project"
+  echo "  2. Use /gsd:new-project or /gsd:progress"
+  echo ""
+}
+
 # Command: help
 cmd_help() {
   echo "GSD Harness CLI"
@@ -232,6 +307,7 @@ cmd_help() {
   echo "  status    Show harness status and active projects"
   echo "  logs      Show harness logs (streaming)"
   echo "  projects  List active projects and sessions (JSON)"
+  echo "  init      Initialize GSD workflows in a project (current dir or specify path)"
   echo "  help      Show this help message"
   echo ""
   echo "Environment:"
@@ -249,6 +325,7 @@ case "${1:-help}" in
   status)   cmd_status ;;
   logs)     cmd_logs ;;
   projects) cmd_projects ;;
+  init)     cmd_init "$@" ;;
   help|--help|-h) cmd_help ;;
   *)
     log_error "Unknown command: $1"
