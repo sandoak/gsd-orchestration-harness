@@ -28,6 +28,9 @@ export interface OrchestrationState {
   highestExecutedPhase: number;
   highestPlannedPhase: number;
   pendingVerifyPhase: number | null; // Phase that needs verify before more executes
+  // Plan-level tracking for finer-grained limits
+  highestExecutingPhase: number; // Phase of currently executing plan (e.g., 5 for 05-01)
+  highestExecutingPlan: number; // Plan number within phase (e.g., 1 for 05-01)
   updatedAt: string;
 }
 
@@ -70,8 +73,11 @@ export class OrchestrationStore {
         highest_executed_phase INTEGER DEFAULT 0,
         highest_planned_phase INTEGER DEFAULT 0,
         pending_verify_phase INTEGER DEFAULT NULL,
+        highest_executing_phase INTEGER DEFAULT 0,
+        highest_executing_plan INTEGER DEFAULT 0,
         updated_at TEXT DEFAULT CURRENT_TIMESTAMP
       );
+
 
       CREATE TABLE IF NOT EXISTS phase_plans (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -89,6 +95,33 @@ export class OrchestrationStore {
       CREATE INDEX IF NOT EXISTS idx_phase_plans_project ON phase_plans(project_path);
       CREATE INDEX IF NOT EXISTS idx_phase_plans_status ON phase_plans(status);
     `);
+
+    // Migration: Add new columns to existing databases
+    this.migrateSchema();
+  }
+
+  /**
+   * Migrate schema for existing databases that don't have new columns.
+   */
+  private migrateSchema(): void {
+    // Check if columns exist by querying table info
+    const columns = this.db.prepare('PRAGMA table_info(orchestration_state)').all() as Array<{
+      name: string;
+    }>;
+    const columnNames = columns.map((c) => c.name);
+
+    if (!columnNames.includes('highest_executing_phase')) {
+      this.db.exec(
+        'ALTER TABLE orchestration_state ADD COLUMN highest_executing_phase INTEGER DEFAULT 0'
+      );
+      console.log('[orchestration-store] Migrated: added highest_executing_phase column');
+    }
+    if (!columnNames.includes('highest_executing_plan')) {
+      this.db.exec(
+        'ALTER TABLE orchestration_state ADD COLUMN highest_executing_plan INTEGER DEFAULT 0'
+      );
+      console.log('[orchestration-store] Migrated: added highest_executing_plan column');
+    }
   }
 
   /**
@@ -106,6 +139,8 @@ export class OrchestrationStore {
         highestExecutedPhase: row.highest_executed_phase as number,
         highestPlannedPhase: row.highest_planned_phase as number,
         pendingVerifyPhase: (row.pending_verify_phase as number | null) ?? null,
+        highestExecutingPhase: (row.highest_executing_phase as number) ?? 0,
+        highestExecutingPlan: (row.highest_executing_plan as number) ?? 0,
         updatedAt: row.updated_at as string,
       };
     }
@@ -113,8 +148,8 @@ export class OrchestrationStore {
     // Create default state
     this.db
       .prepare(
-        `INSERT INTO orchestration_state (project_path, highest_executed_phase, highest_planned_phase)
-         VALUES (?, 0, 0)`
+        `INSERT INTO orchestration_state (project_path, highest_executed_phase, highest_planned_phase, highest_executing_phase, highest_executing_plan)
+         VALUES (?, 0, 0, 0, 0)`
       )
       .run(projectPath);
 
@@ -123,6 +158,8 @@ export class OrchestrationStore {
       highestExecutedPhase: 0,
       highestPlannedPhase: 0,
       pendingVerifyPhase: null,
+      highestExecutingPhase: 0,
+      highestExecutingPlan: 0,
       updatedAt: new Date().toISOString(),
     };
   }
@@ -148,6 +185,14 @@ export class OrchestrationStore {
     if (updates.pendingVerifyPhase !== undefined) {
       setClauses.push('pending_verify_phase = ?');
       values.push(updates.pendingVerifyPhase);
+    }
+    if (updates.highestExecutingPhase !== undefined) {
+      setClauses.push('highest_executing_phase = ?');
+      values.push(updates.highestExecutingPhase);
+    }
+    if (updates.highestExecutingPlan !== undefined) {
+      setClauses.push('highest_executing_plan = ?');
+      values.push(updates.highestExecutingPlan);
     }
 
     values.push(projectPath);
@@ -209,7 +254,7 @@ export class OrchestrationStore {
   }
 
   /**
-   * Mark a plan as executing.
+   * Mark a plan as executing and update the highestExecuting tracking.
    */
   markExecuting(projectPath: string, planPath: string): void {
     this.db
@@ -217,6 +262,31 @@ export class OrchestrationStore {
         "UPDATE phase_plans SET status = 'executing' WHERE project_path = ? AND plan_path = ?"
       )
       .run(projectPath, planPath);
+
+    // Extract phase and plan number from path (e.g., "phases/05-name/05-01-PLAN.md")
+    const planMatch = planPath.match(/(\d{2})-(\d{2})-PLAN\.md/i);
+
+    if (planMatch && planMatch[1] && planMatch[2]) {
+      const phaseNumber = parseInt(planMatch[1], 10);
+      const planNumber = parseInt(planMatch[2], 10);
+
+      const state = this.getState(projectPath);
+
+      // Update if this is a higher phase, or same phase with higher plan
+      const shouldUpdate =
+        phaseNumber > state.highestExecutingPhase ||
+        (phaseNumber === state.highestExecutingPhase && planNumber > state.highestExecutingPlan);
+
+      if (shouldUpdate) {
+        this.updateState(projectPath, {
+          highestExecutingPhase: phaseNumber,
+          highestExecutingPlan: planNumber,
+        });
+        console.log(
+          `[orchestration-store] Updated highestExecuting to ${String(phaseNumber).padStart(2, '0')}-${String(planNumber).padStart(2, '0')}`
+        );
+      }
+    }
   }
 
   /**
@@ -322,27 +392,88 @@ export class OrchestrationStore {
   }
 
   /**
-   * Check if a new plan can start (enforces 2-ahead limit).
+   * Check if a new plan can start (enforces 2-ahead limit at PLAN level).
+   *
+   * Planning limit is 2 PLANS ahead of current execution, not phases.
+   * Example: If executing 05-01, can plan 05-01, 05-02, 05-03 but NOT 05-04 or 06-xx.
+   *
+   * Cross-phase planning only allowed after current phase is complete.
+   *
+   * @param projectPath - Project path
+   * @param phaseNumber - Phase number of requested plan (e.g., 5 for 05-01)
+   * @param planNumber - Plan number within phase (e.g., 1 for 05-01). If not provided, defaults to 1.
    */
   canStartPlan(
     projectPath: string,
-    phaseNumber: number
-  ): { allowed: boolean; reason?: string; maxAllowed?: number } {
+    phaseNumber: number,
+    planNumber: number = 1
+  ): { allowed: boolean; reason?: string; maxAllowedPlan?: string } {
     const state = this.getState(projectPath);
-    const maxAllowed = state.highestExecutedPhase + 2;
 
-    // Special case: if nothing executed yet, allow phases 1-2
-    const effectiveMax = state.highestExecutedPhase === 0 ? 2 : maxAllowed;
+    // Special case: if nothing executing yet, allow first 3 plans (01-01, 01-02, 01-03 or 02-01)
+    if (state.highestExecutingPhase === 0) {
+      // Allow phase 1 plans 1-3, or phase 2 plan 1
+      if (phaseNumber === 1 && planNumber <= 3) {
+        return { allowed: true };
+      }
+      if (phaseNumber === 2 && planNumber === 1) {
+        return { allowed: true };
+      }
+      if (phaseNumber > 2 || (phaseNumber === 2 && planNumber > 1)) {
+        return {
+          allowed: false,
+          reason: `No execution started yet. Can only plan up to 02-01 initially. Requested: ${String(phaseNumber).padStart(2, '0')}-${String(planNumber).padStart(2, '0')}.`,
+          maxAllowedPlan: '02-01',
+        };
+      }
+      return { allowed: true };
+    }
 
-    if (phaseNumber > effectiveMax) {
+    const execPhase = state.highestExecutingPhase;
+    const execPlan = state.highestExecutingPlan;
+
+    // Same phase: allow up to execPlan + 2
+    if (phaseNumber === execPhase) {
+      const maxPlan = execPlan + 2;
+      if (planNumber <= maxPlan) {
+        return { allowed: true };
+      }
       return {
         allowed: false,
-        reason: `Can only plan ${2} phases ahead. Highest executed: Phase ${state.highestExecutedPhase}. Max allowed: Phase ${effectiveMax}. Requested: Phase ${phaseNumber}.`,
-        maxAllowed: effectiveMax,
+        reason: `Can only plan 2 plans ahead. Currently executing: ${String(execPhase).padStart(2, '0')}-${String(execPlan).padStart(2, '0')}. Max allowed: ${String(execPhase).padStart(2, '0')}-${String(maxPlan).padStart(2, '0')}. Requested: ${String(phaseNumber).padStart(2, '0')}-${String(planNumber).padStart(2, '0')}.`,
+        maxAllowedPlan: `${String(execPhase).padStart(2, '0')}-${String(maxPlan).padStart(2, '0')}`,
       };
     }
 
-    return { allowed: true };
+    // Next phase: only allow if we're near the end of current phase
+    // Allow planning next phase's first 2 plans if executing last plan of current phase
+    if (phaseNumber === execPhase + 1) {
+      // Check how many plans exist in current phase
+      const currentPhasePlans = this.getPhasePlans(projectPath, execPhase);
+      const maxPlanInPhase = Math.max(...currentPhasePlans.map((p) => p.planNumber), execPlan);
+
+      // If executing last plan of phase (or close to it), allow next phase planning
+      // "close" means within 1 plan of the end
+      if (execPlan >= maxPlanInPhase - 1) {
+        const remainingSlots = 2 - (maxPlanInPhase - execPlan);
+        if (planNumber <= remainingSlots) {
+          return { allowed: true };
+        }
+      }
+
+      return {
+        allowed: false,
+        reason: `Must complete more of Phase ${execPhase} before planning Phase ${phaseNumber}. Currently executing: ${String(execPhase).padStart(2, '0')}-${String(execPlan).padStart(2, '0')}.`,
+        maxAllowedPlan: `${String(execPhase).padStart(2, '0')}-${String(execPlan + 2).padStart(2, '0')}`,
+      };
+    }
+
+    // Phase too far ahead
+    return {
+      allowed: false,
+      reason: `Phase ${phaseNumber} is too far ahead. Currently executing Phase ${execPhase}. Must complete Phase ${execPhase} before planning Phase ${phaseNumber}.`,
+      maxAllowedPlan: `${String(execPhase).padStart(2, '0')}-${String(execPlan + 2).padStart(2, '0')}`,
+    };
   }
 
   /**

@@ -193,7 +193,8 @@ export function registerStartSessionTool(
       const planPhase = extractPhaseNumber(command);
 
       if (planPhase !== null) {
-        // Check planning limit from database
+        // Check planning limit from database (plan-level, not phase-level)
+        // For /gsd:plan-phase X, we check if planning any plan in Phase X is allowed
         const planCheck = orchestrationStore.canStartPlan(workingDir, planPhase);
         if (!planCheck.allowed) {
           console.log(`[mcp] BLOCKED: Planning limit - ${planCheck.reason}`);
@@ -204,7 +205,7 @@ export function registerStartSessionTool(
                 text: JSON.stringify({
                   success: false,
                   error: `PLANNING LIMIT: ${planCheck.reason}`,
-                  maxAllowedPhase: planCheck.maxAllowed,
+                  maxAllowedPlan: planCheck.maxAllowedPlan,
                   requestedPhase: planPhase,
                 }),
               },
