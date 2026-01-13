@@ -445,27 +445,10 @@ export class OrchestrationStore {
       };
     }
 
-    // Next phase: only allow if we're near the end of current phase
-    // Allow planning next phase's first 2 plans if executing last plan of current phase
+    // Next phase (N+1): always allowed while executing phase N
+    // This keeps the planning pipeline fed without getting too far ahead
     if (phaseNumber === execPhase + 1) {
-      // Check how many plans exist in current phase
-      const currentPhasePlans = this.getPhasePlans(projectPath, execPhase);
-      const maxPlanInPhase = Math.max(...currentPhasePlans.map((p) => p.planNumber), execPlan);
-
-      // If executing last plan of phase (or close to it), allow next phase planning
-      // "close" means within 1 plan of the end
-      if (execPlan >= maxPlanInPhase - 1) {
-        const remainingSlots = 2 - (maxPlanInPhase - execPlan);
-        if (planNumber <= remainingSlots) {
-          return { allowed: true };
-        }
-      }
-
-      return {
-        allowed: false,
-        reason: `Must complete more of Phase ${execPhase} before planning Phase ${phaseNumber}. Currently executing: ${String(execPhase).padStart(2, '0')}-${String(execPlan).padStart(2, '0')}.`,
-        maxAllowedPlan: `${String(execPhase).padStart(2, '0')}-${String(execPlan + 2).padStart(2, '0')}`,
-      };
+      return { allowed: true };
     }
 
     // Phase too far ahead
