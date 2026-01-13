@@ -21,9 +21,14 @@ import * as fs from 'fs';
 import * as http from 'http';
 import * as os from 'os';
 import * as path from 'path';
+import { fileURLToPath } from 'url';
 
 import { PersistentSessionManager } from '@gsd/session-manager';
 import { HarnessServer } from '@gsd/web-server';
+
+// ESM equivalent of __dirname
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 /**
  * Default port for the web dashboard.
