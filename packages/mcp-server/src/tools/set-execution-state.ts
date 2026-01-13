@@ -14,14 +14,35 @@ const setExecutionStateSchema = {
     .int()
     .min(0)
     .describe('The highest phase number that has been fully executed'),
+  // Plan-level tracking (optional for backwards compatibility)
+  highestExecutingPhase: z
+    .number()
+    .int()
+    .min(0)
+    .optional()
+    .describe('Phase of currently executing plan (e.g., 5 for 05-01)'),
+  highestExecutingPlan: z
+    .number()
+    .int()
+    .min(0)
+    .optional()
+    .describe('Plan number within phase (e.g., 1 for 05-01)'),
+  // Reset flag for reconciliation
+  forceReset: z
+    .boolean()
+    .optional()
+    .describe('If true, clear all project state and reinitialize from scratch'),
 };
 
 /**
  * Registers the gsd_set_execution_state tool with the MCP server.
  *
- * This tool allows the orchestrator to initialize the harness with the current
- * execution state after reading ROADMAP.md and STATE.md. This ensures the
- * planning limits are enforced correctly even after harness restarts.
+ * This tool allows the orchestrator to initialize/reconcile the harness with
+ * the current execution state after reading ROADMAP.md and STATE.md.
+ *
+ * IMPORTANT: The orchestrator is the source of truth. This tool ALWAYS overwrites
+ * the database state with the provided values (not just updates if higher).
+ * This ensures state reconciliation works correctly after orchestrator restarts.
  *
  * @param server - The MCP server instance
  * @param orchestrationStore - The orchestration store for database updates
@@ -33,23 +54,81 @@ export function registerSetExecutionStateTool(
   server.tool(
     'gsd_set_execution_state',
     setExecutionStateSchema,
-    async ({ projectPath, highestExecutedPhase }) => {
+    async ({
+      projectPath,
+      highestExecutedPhase,
+      highestExecutingPhase,
+      highestExecutingPlan,
+      forceReset,
+    }) => {
       console.log(
-        `[mcp] gsd_set_execution_state called - projectPath: ${projectPath}, highestExecutedPhase: ${highestExecutedPhase}`
+        `[mcp] gsd_set_execution_state called - projectPath: ${projectPath}, ` +
+          `highestExecutedPhase: ${highestExecutedPhase}, ` +
+          `highestExecutingPhase: ${highestExecutingPhase ?? 'not set'}, ` +
+          `highestExecutingPlan: ${highestExecutingPlan ?? 'not set'}, ` +
+          `forceReset: ${forceReset ?? false}`
       );
 
-      // Get previous state from database
+      // Get previous state from database for comparison
       const previousState = orchestrationStore.getState(projectPath);
-      const previousPhase = previousState.highestExecutedPhase;
+
+      // If forceReset, clear all project state first
+      if (forceReset) {
+        orchestrationStore.clearProject(projectPath);
+        console.log(`[mcp] Force reset: cleared all state for ${projectPath}`);
+      }
+
+      // Build state diff for logging/warnings
+      const stateDiff = {
+        highestExecutedPhase: {
+          old: previousState.highestExecutedPhase,
+          new: highestExecutedPhase,
+          change: highestExecutedPhase - previousState.highestExecutedPhase,
+        },
+        highestExecutingPhase: {
+          old: previousState.highestExecutingPhase,
+          new: highestExecutingPhase ?? highestExecutedPhase,
+        },
+        highestExecutingPlan: {
+          old: previousState.highestExecutingPlan,
+          new: highestExecutingPlan ?? 1,
+        },
+      };
+
+      // Log warning if there's a significant downgrade (possible stale state issue)
+      if (stateDiff.highestExecutedPhase.change < -2) {
+        console.warn(
+          `[mcp] WARNING: Large state downgrade detected! ` +
+            `DB had Phase ${previousState.highestExecutedPhase}, ` +
+            `orchestrator says Phase ${highestExecutedPhase}. ` +
+            `This may indicate stale harness state or orchestrator error.`
+        );
+      }
 
       // Update in-memory state (legacy compatibility)
       setHighestExecutedPhase(highestExecutedPhase);
 
-      // Update database state (this is what canStartPlan actually reads)
-      orchestrationStore.updateState(projectPath, { highestExecutedPhase });
+      // Update database state - ALWAYS overwrite with orchestrator's values
+      // The orchestrator is the source of truth (reads STATE.md, ROADMAP.md)
+      orchestrationStore.updateState(projectPath, {
+        highestExecutedPhase,
+        highestExecutingPhase: highestExecutingPhase ?? highestExecutedPhase,
+        highestExecutingPlan: highestExecutingPlan ?? 1,
+      });
+
+      const execPlanStr =
+        highestExecutingPhase !== undefined && highestExecutingPlan !== undefined
+          ? `${String(highestExecutingPhase).padStart(2, '0')}-${String(highestExecutingPlan).padStart(2, '0')}`
+          : 'not set';
+
+      const maxAllowedPlan =
+        highestExecutingPhase !== undefined && highestExecutingPlan !== undefined
+          ? `${String(highestExecutingPhase).padStart(2, '0')}-${String(highestExecutingPlan + 2).padStart(2, '0')}`
+          : `Phase ${highestExecutedPhase + 1}`;
 
       console.log(
-        `[mcp] highestExecutedPhase updated: ${previousPhase} -> ${highestExecutedPhase} (in DB and memory)`
+        `[mcp] State updated: executed Phase ${previousState.highestExecutedPhase} -> ${highestExecutedPhase}, ` +
+          `executing ${execPlanStr}. Planning limited to ${maxAllowedPlan}.`
       );
 
       return {
@@ -58,9 +137,18 @@ export function registerSetExecutionStateTool(
             type: 'text',
             text: JSON.stringify({
               success: true,
-              previousHighestExecutedPhase: previousPhase,
-              newHighestExecutedPhase: highestExecutedPhase,
-              message: `Execution state updated. Planning limited to phase ${highestExecutedPhase + 2} until more phases are executed.`,
+              previousState: {
+                highestExecutedPhase: previousState.highestExecutedPhase,
+                highestExecutingPhase: previousState.highestExecutingPhase,
+                highestExecutingPlan: previousState.highestExecutingPlan,
+              },
+              newState: {
+                highestExecutedPhase,
+                highestExecutingPhase: highestExecutingPhase ?? highestExecutedPhase,
+                highestExecutingPlan: highestExecutingPlan ?? 1,
+              },
+              reconciled: forceReset || stateDiff.highestExecutedPhase.change < 0,
+              message: `State synchronized. Planning limited to ${maxAllowedPlan}.`,
             }),
           },
         ],

@@ -30,6 +30,17 @@ ANY CHECKED → /gsd:research-phase X FIRST
 - Don't let slots sit idle when work is queued
 - Start multiple sessions in parallel, don't chain sequentially
 
+### STATE RECONCILIATION AT STARTUP
+
+```
+ALWAYS call on orchestrator start:
+gsd_set_execution_state(projectPath, highestExecutedPhase, highestExecutingPhase, highestExecutingPlan, forceReset: true)
+```
+
+- Read STATE.md/ROADMAP.md to determine true execution state
+- Database may have stale state from previous runs
+- forceReset clears database and reinitializes
+
 ### CONTEXT ROT CHECK
 
 Every 5 session completions, re-read this file to refresh instructions.
@@ -971,12 +982,35 @@ Quick reference for harness MCP tools:
 - Updates: `highestExecutedPhase`, `pendingVerifyPhase`, discovered plans
 - Harness uses this to enforce physical barriers
 
-**gsd_set_execution_state** ⭐ USE TO FIX STALE STATE
+**gsd_set_execution_state** ⭐ STATE RECONCILIATION
 
-- Purpose: Manually set highest executed phase when database is out of sync
-- Args: `projectPath` (absolute path), `highestExecutedPhase` (number)
-- Use when: Planning limit errors persist after sync_project_state
-- Example: `gsd_set_execution_state(projectPath, 5)` → allows planning up to phase 7
+- Purpose: Synchronize harness state with actual project state (from STATE.md)
+- **ALWAYS call at orchestration start** to reconcile database with reality
+- Args:
+  - `projectPath` (required): Absolute path to project
+  - `highestExecutedPhase` (required): Last fully executed phase number
+  - `highestExecutingPhase` (optional): Phase of currently executing plan (e.g., 5 for 05-01)
+  - `highestExecutingPlan` (optional): Plan number within phase (e.g., 1 for 05-01)
+  - `forceReset` (optional): If true, clear all state and reinitialize
+
+**Example - Full reconciliation at startup:**
+
+```
+gsd_set_execution_state(
+  projectPath: "/path/to/project",
+  highestExecutedPhase: 4,        // Phase 4 fully done
+  highestExecutingPhase: 5,       // Currently executing 05-01
+  highestExecutingPlan: 1,        // Plan 01 of phase 05
+  forceReset: true                // Clear stale state
+)
+→ Planning limited to 05-03 (2 plans ahead)
+```
+
+**When to use forceReset:**
+
+- Orchestrator restarted and state seems wrong
+- Planning blocked when it shouldn't be
+- Database has higher phase than reality
 
 </mcp_tool_reference>
 
@@ -989,9 +1023,11 @@ The harness physically blocks commands that violate these rules:
    - Second execute request → BLOCKED with error
    - Prevents: Codebase conflicts from parallel code changes
 
-2. **PLANNING LIMIT**: Max 2 phases ahead of execution
-   - `plan_phase > highest_executed + 2` → BLOCKED
-   - Prevents: Racing ahead without verification
+2. **PLANNING LIMIT**: Max 2 PLANS ahead (not phases!)
+   - If executing 05-01 → can plan up to 05-03
+   - If executing 05-03 → can plan 05-03, 05-04, 05-05 or 06-01 (if near end of phase)
+   - Cross-phase planning only allowed when near end of current phase
+   - Prevents: Planning far ahead with stale context
 
 3. **VERIFY GATE**: Limits how far ahead executes can go
    - Check `limits.maxExecutePhase` in sync response
