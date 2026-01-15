@@ -31,6 +31,24 @@ AFTER ALL PLANS IN PHASE COMPLETE:
 - Phase-level verify validates integration
 - BOTH are mandatory, not optional
 
+### BLOCKING ISSUES MUST BE FIXED (NEVER SKIP!)
+
+```
+❌ WRONG: Verification finds blocking issues → "Continue to Phase 4 anyway"
+❌ WRONG: "Let me skip fixing and move on to test Phase 4"
+✅ RIGHT: Verification finds blocking issues → FIX THEM → Re-verify → THEN proceed
+```
+
+**When verification finds BLOCKING issues:**
+
+1. **STOP** - Do not proceed to next phase
+2. **FIX** - Run `/gsd:plan-fix` to create fix plan, then execute it
+3. **RE-VERIFY** - Run verification again after fix
+4. **ONLY THEN** proceed to next phase
+
+**Blocking issues are BLOCKERS** - the name says it all. You cannot skip them.
+If Phase 3 has blocking issues, Phase 4 CANNOT proceed until Phase 3 is fixed.
+
 ### USE IDLE SLOTS FOR VERIFICATION (Don't Wait!)
 
 ```
