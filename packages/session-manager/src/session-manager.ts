@@ -37,16 +37,43 @@ interface SessionManagerEvents {
 }
 
 /**
- * Determines the Claude CLI executable based on environment.
- * - CLAUDE_EXECUTABLE env var takes priority
- * - Falls back to 'claude' (default)
+ * Known Claude account aliases that map to config directories.
+ * These are shell aliases (not executables) that set CLAUDE_CONFIG_DIR.
  *
- * For different accounts:
- * - sandoakholdings@gmail.com → claude
- * - chrisb@macconstruction.com → claude-overflow
+ * The pattern is: alias claude-X='CLAUDE_CONFIG_DIR=~/.claude-X claude'
  */
-function getDefaultExecutable(): string {
-  return process.env.CLAUDE_EXECUTABLE ?? 'claude';
+const CLAUDE_ALIAS_CONFIG_DIRS: Record<string, string> = {
+  'claude-overflow': `${process.env.HOME}/.claude-overflow`,
+};
+
+/**
+ * Resolves Claude executable and config directory from environment.
+ *
+ * Handles shell alias patterns like 'claude-overflow' which are not real
+ * executables but aliases that set CLAUDE_CONFIG_DIR:
+ *   alias claude-overflow='CLAUDE_CONFIG_DIR=~/.claude-overflow claude'
+ *
+ * Returns:
+ * - executable: The actual binary to spawn (always 'claude')
+ * - configDir: The CLAUDE_CONFIG_DIR to use, or undefined for default
+ */
+function resolveClaudeExecutable(): { executable: string; configDir?: string } {
+  const requestedExecutable = process.env.CLAUDE_EXECUTABLE ?? 'claude';
+
+  // Check if this is a known alias pattern
+  const aliasConfigDir = CLAUDE_ALIAS_CONFIG_DIRS[requestedExecutable];
+  if (aliasConfigDir) {
+    return {
+      executable: 'claude',
+      configDir: aliasConfigDir,
+    };
+  }
+
+  // Not an alias - use as-is (could be 'claude' or a custom path)
+  return {
+    executable: requestedExecutable,
+    configDir: undefined,
+  };
 }
 
 export interface SessionManagerOptions {
@@ -68,12 +95,18 @@ export class SessionManager extends EventEmitter<SessionManagerEvents> {
   private availableSlots: Set<SlotNumber> = new Set(SESSION_SLOTS);
   private outputBufferSize: number;
   private executable: string;
+  /** Config directory override from alias expansion (e.g., claude-overflow → ~/.claude-overflow) */
+  private configDirOverride?: string;
   private spawnLock: boolean = false;
 
   constructor(options?: SessionManagerOptions) {
     super();
     this.outputBufferSize = options?.outputBufferSize ?? DEFAULT_OUTPUT_BUFFER_SIZE;
-    this.executable = options?.executable ?? getDefaultExecutable();
+
+    // Resolve executable, handling alias patterns like 'claude-overflow'
+    const resolved = resolveClaudeExecutable();
+    this.executable = options?.executable ?? resolved.executable;
+    this.configDirOverride = resolved.configDir;
   }
 
   /**
@@ -109,7 +142,10 @@ export class SessionManager extends EventEmitter<SessionManagerEvents> {
       // IMPORTANT: For Claude CLI, do NOT pass command as positional args - that triggers "print mode"
       // which exits after one response. We need interactive mode, sending commands via stdin.
       const args: string[] = [];
-      const isClaudeCli = this.executable === 'claude' || this.executable === 'claude-overflow';
+      // Note: 'claude-overflow' is an alias, not an executable. The resolveClaudeExecutable()
+      // function handles alias expansion, so this.executable should always be 'claude' or
+      // a full path to the claude binary.
+      const isClaudeCli = this.executable === 'claude' || this.executable.endsWith('/claude');
 
       if (isClaudeCli) {
         args.push('--dangerously-skip-permissions');
@@ -132,6 +168,12 @@ export class SessionManager extends EventEmitter<SessionManagerEvents> {
         ...(process.env as Record<string, string>),
         GSD_HARNESS_CHILD: '1',
       };
+
+      // Apply config dir override if set (from alias expansion like claude-overflow)
+      // This only applies if CLAUDE_CONFIG_DIR isn't already set in the environment
+      if (this.configDirOverride && !process.env.CLAUDE_CONFIG_DIR) {
+        childEnv.CLAUDE_CONFIG_DIR = this.configDirOverride;
+      }
 
       // Spawn the process using PTY for proper terminal emulation
       // This is required for Claude CLI which needs a terminal
