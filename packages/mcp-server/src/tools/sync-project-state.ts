@@ -38,16 +38,20 @@ function parsePlanFilename(filename: string): { phase: number; plan: number } | 
 
 /**
  * Scan a project's .planning/phases/ directory and discover all plans.
+ * Also returns set of phases that have VERIFICATION.md files.
  */
-async function scanPlanningDirectory(projectPath: string): Promise<DiscoveredPlan[]> {
+async function scanPlanningDirectory(
+  projectPath: string
+): Promise<{ plans: DiscoveredPlan[]; verifiedPhases: Set<number> }> {
   const phasesDir = join(projectPath, '.planning', 'phases');
   const plans: DiscoveredPlan[] = [];
+  const verifiedPhases = new Set<number>();
 
   try {
     await access(phasesDir, constants.R_OK);
   } catch {
     console.log(`[sync-project-state] No .planning/phases/ directory at ${phasesDir}`);
-    return plans;
+    return { plans, verifiedPhases };
   }
 
   // Read phase directories
@@ -57,10 +61,17 @@ async function scanPlanningDirectory(projectPath: string): Promise<DiscoveredPla
     if (!phaseDir.isDirectory()) continue;
 
     const phaseMatch = phaseDir.name.match(/^(\d{2})-/);
-    if (!phaseMatch) continue;
+    if (!phaseMatch || !phaseMatch[1]) continue;
 
+    const phaseNumber = parseInt(phaseMatch[1], 10);
     const phasePath = join(phasesDir, phaseDir.name);
     const files = await readdir(phasePath);
+
+    // Check for VERIFICATION.md at phase level
+    if (files.includes('VERIFICATION.md')) {
+      verifiedPhases.add(phaseNumber);
+      console.log(`[sync-project-state] Phase ${phaseNumber} has VERIFICATION.md`);
+    }
 
     // Find PLAN.md files
     for (const file of files) {
@@ -87,6 +98,11 @@ async function scanPlanningDirectory(projectPath: string): Promise<DiscoveredPla
         }
       }
 
+      // If phase has VERIFICATION.md, mark all executed plans as verified
+      if (verifiedPhases.has(parsed.phase) && status === 'executed') {
+        status = 'verified';
+      }
+
       plans.push({
         phaseNumber: parsed.phase,
         planNumber: parsed.plan,
@@ -103,7 +119,7 @@ async function scanPlanningDirectory(projectPath: string): Promise<DiscoveredPla
     return a.planNumber - b.planNumber;
   });
 
-  return plans;
+  return { plans, verifiedPhases };
 }
 
 /**
@@ -144,8 +160,8 @@ export function registerSyncProjectStateTool(
     console.log(`[mcp] gsd_sync_project_state called - projectPath: ${projectPath}`);
 
     try {
-      // Scan filesystem for plans
-      const discoveredPlans = await scanPlanningDirectory(projectPath);
+      // Scan filesystem for plans and verified phases
+      const { plans: discoveredPlans, verifiedPhases } = await scanPlanningDirectory(projectPath);
 
       // Read STATE.md for context
       await readStateFile(projectPath);
@@ -156,6 +172,7 @@ export function registerSyncProjectStateTool(
       // Sync plans to database
       let highestPlanned = 0;
       let highestExecuted = 0;
+      let highestVerified = 0;
       let executedCount = 0;
       let plannedCount = 0;
 
@@ -177,8 +194,18 @@ export function registerSyncProjectStateTool(
           if (plan.phaseNumber > highestExecuted) {
             highestExecuted = plan.phaseNumber;
           }
+          if (plan.status === 'verified' && plan.phaseNumber > highestVerified) {
+            highestVerified = plan.phaseNumber;
+          }
         } else {
           plannedCount++;
+        }
+      }
+
+      // Track highest verified phase from VERIFICATION.md files
+      for (const phase of verifiedPhases) {
+        if (phase > highestVerified) {
+          highestVerified = phase;
         }
       }
 
@@ -187,6 +214,11 @@ export function registerSyncProjectStateTool(
         highestPlannedPhase: highestPlanned,
         highestExecutedPhase: highestExecuted,
       });
+
+      // Mark phases with VERIFICATION.md as verified in the database
+      for (const phase of verifiedPhases) {
+        orchestrationStore.markPhaseVerified(projectPath, phase);
+      }
 
       // Check for pending verify (all plans in a phase executed but phase not verified)
       const dbPlans = orchestrationStore.getPlans(projectPath);

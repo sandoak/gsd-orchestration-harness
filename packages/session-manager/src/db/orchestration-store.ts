@@ -410,8 +410,9 @@ export class OrchestrationStore {
   ): { allowed: boolean; reason?: string; maxAllowedPlan?: string } {
     const state = this.getState(projectPath);
 
-    // Special case: if nothing executing yet, allow first 3 plans (01-01, 01-02, 01-03 or 02-01)
-    if (state.highestExecutingPhase === 0) {
+    // Case 1: Nothing executing AND nothing previously executed (truly fresh project)
+    // Allow first 3 plans (01-01, 01-02, 01-03 or 02-01)
+    if (state.highestExecutingPhase === 0 && state.highestExecutedPhase === 0) {
       // Allow phase 1 plans 1-3, or phase 2 plan 1
       if (phaseNumber === 1 && planNumber <= 3) {
         return { allowed: true };
@@ -427,6 +428,21 @@ export class OrchestrationStore {
         };
       }
       return { allowed: true };
+    }
+
+    // Case 2: Nothing currently executing but phases were previously executed
+    // (e.g., new milestone starting, or resuming after pause)
+    // Allow planning up to N+2 phases ahead of highest executed phase
+    if (state.highestExecutingPhase === 0 && state.highestExecutedPhase > 0) {
+      const maxPhase = state.highestExecutedPhase + 2;
+      if (phaseNumber <= maxPhase) {
+        return { allowed: true };
+      }
+      return {
+        allowed: false,
+        reason: `Planning limited to Phase ${maxPhase}. Highest executed: Phase ${state.highestExecutedPhase}. Requested: Phase ${phaseNumber}.`,
+        maxAllowedPlan: `${String(maxPhase).padStart(2, '0')}-01`,
+      };
     }
 
     const execPhase = state.highestExecutingPhase;
