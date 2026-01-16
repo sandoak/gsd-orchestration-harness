@@ -193,8 +193,12 @@ export class PersistentSessionManager extends EventEmitter<PersistentSessionMana
       this.emit('session:failed', event);
     });
 
-    // session:waiting → re-emit (no persistence needed for wait states)
+    // session:waiting → update status and re-emit
+    // MCP tools check database status, so we must persist waiting_checkpoint
     this.sessionManager.on('session:waiting', (event) => {
+      this.sessionStore.update(event.sessionId, {
+        status: 'waiting_checkpoint',
+      });
       this.emit('session:waiting', event);
     });
   }
