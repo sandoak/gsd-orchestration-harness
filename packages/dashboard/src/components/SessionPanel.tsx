@@ -34,8 +34,8 @@ export function SessionPanel() {
   return (
     // Use lg breakpoint (1024px) for 2x2 grid layout
     // Below 1024px: 1 column (each slot gets full width)
-    // Above 1024px: 2x2 grid (4 slots)
-    <div className="grid h-full grid-cols-1 gap-4 overflow-hidden lg:grid-cols-2">
+    // Above 1024px: 2x2 grid (4 slots with equal sizing)
+    <div className="grid h-full grid-cols-1 gap-4 overflow-hidden lg:grid-cols-2 lg:grid-rows-2">
       <SessionSlot slot={1} session={getSessionForSlot(1)} />
       <SessionSlot slot={2} session={getSessionForSlot(2)} />
       <SessionSlot slot={3} session={getSessionForSlot(3)} />
