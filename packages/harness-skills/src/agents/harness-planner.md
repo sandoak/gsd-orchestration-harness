@@ -478,17 +478,21 @@ After completion, create `.planning/phases/XX-name/{phase}-{plan}-SUMMARY.md`
 
 ## Frontmatter Fields
 
-| Field            | Required | Purpose                                              |
-| ---------------- | -------- | ---------------------------------------------------- |
-| `phase`          | Yes      | Phase identifier (e.g., `01-foundation`)             |
-| `plan`           | Yes      | Plan number within phase                             |
-| `type`           | Yes      | `execute` for standard, `tdd` for TDD plans          |
-| `wave`           | Yes      | Execution wave number (1, 2, 3...)                   |
-| `depends_on`     | Yes      | Array of plan IDs this plan requires                 |
-| `files_modified` | Yes      | Files this plan touches                              |
-| `autonomous`     | Yes      | `true` if no checkpoints, `false` if has checkpoints |
-| `user_setup`     | No       | Human-required setup items                           |
-| `must_haves`     | Yes      | Goal-backward verification criteria                  |
+| Field            | Required | Purpose                                               |
+| ---------------- | -------- | ----------------------------------------------------- |
+| `phase`          | Yes      | Phase identifier (e.g., `01-foundation`)              |
+| `plan`           | Yes      | Plan number within phase                              |
+| `type`           | Yes      | `execute` for standard, `tdd` for TDD plans           |
+| `wave`           | Yes      | Execution wave number (1, 2, 3...)                    |
+| `depends_on`     | Yes      | Array of plan IDs this plan requires                  |
+| `files_modified` | Yes      | Files this plan touches                               |
+| `autonomous`     | Yes      | `true` if no checkpoints, `false` if has checkpoints  |
+| `user_setup`     | No       | Human-required setup items                            |
+| `must_haves`     | Yes      | Goal-backward verification criteria                   |
+| `must_pass`      | No       | Structured verification specs (auto/playwright/human) |
+| `should_pass`    | No       | Optional verifications (run but don't block)          |
+| `api_base_url`   | No       | Base URL for API verification specs                   |
+| `ui_base_url`    | No       | Base URL for UI verification specs                    |
 
 **Wave is pre-computed:** Wave numbers are assigned during planning. Execute-phase reads `wave` directly from frontmatter and groups plans by wave number.
 
@@ -518,6 +522,46 @@ user_setup:
 ```
 
 Only include what Claude literally cannot do (account creation, secret retrieval, dashboard config).
+
+## Verification Manifest (Automated Testing)
+
+For plans that benefit from automated verification, add structured specs:
+
+```yaml
+must_pass:
+  - id: api-login-works
+    type: api_response
+    method: POST
+    url: /api/auth/login
+    body: { email: 'test@example.com', password: 'valid123' }
+    expects:
+      status: 200
+      body: { success: true }
+    critical: true
+
+  - id: tests-pass
+    type: tests_pass
+    command: npm test -- --grep "auth"
+
+  - id: build-succeeds
+    type: build_succeeds
+
+should_pass:
+  - id: lint-clean
+    type: lint_clean
+
+api_base_url: 'http://localhost:3000'
+```
+
+**Verification Types (use appropriate category):**
+
+| Category   | Types                                                                                  | When to Use                   |
+| ---------- | -------------------------------------------------------------------------------------- | ----------------------------- |
+| Auto       | file_exists, file_contains, command_succeeds, api_response, tests_pass, build_succeeds | Fully automatable checks      |
+| Playwright | ui_element_exists, ui_navigation, ui_form_submit, ui_no_console_errors                 | Browser-based UI verification |
+| Human      | visual_quality, ux_flow, content_review, security_review                               | Requires human judgment       |
+
+**Auto verifications** run immediately after plan execution. **Playwright verifications** run via browser automation. **Human verifications** queue for user review via orchestrator.
 
 </plan_format>
 

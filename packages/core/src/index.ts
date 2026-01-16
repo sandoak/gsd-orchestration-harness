@@ -9,6 +9,7 @@ export * from './types/worker-messages.js';
 export * from './types/orchestrator-messages.js';
 export * from './types/protocol.js';
 export * from './types/roadmap-frontmatter.js';
+export * from './types/verification.js';
 
 // Constants
 export * from './constants.js';
