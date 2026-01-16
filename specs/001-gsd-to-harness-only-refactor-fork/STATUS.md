@@ -25,8 +25,8 @@ From SPEC.md:
 | ----- | ---------------------------------- | -------- | ------- |
 | 0     | Fork GSD Skills → Harness Commands | Complete | d1aa4f8 |
 | 1     | Worker Message Protocol            | Complete | c88106b |
-| 2     | File-Based Protocol Directory      | Complete | pending |
-| 3     | Project State Documents            | Pending  |         |
+| 2     | File-Based Protocol Directory      | Complete | ce5d87e |
+| 3     | Project State Documents            | Complete | (tbd)   |
 | 4     | Verification System                | Pending  |         |
 | 5     | Worker Instructions Template       | Pending  |         |
 | 6     | Migration and Cleanup              | Pending  |         |
@@ -97,7 +97,7 @@ From SPEC.md:
 
 ## Phase 2 Complete
 
-**Commit:** pending
+**Commit:** ce5d87e
 **Date:** 2026-01-16
 
 **Goal:** Add `.orchestration/` protocol directory for crash recovery and state persistence
@@ -145,6 +145,81 @@ From SPEC.md:
       checkpoint_response.json  # Orchestrator response
       result.json          # Final execution result
 ```
+
+**Files created:** 2 new TypeScript files
+**Files modified:** 3 existing TypeScript files
+
+---
+
+## Phase 3 Complete
+
+**Commit:** (tbd)
+**Date:** 2026-01-16
+
+**Goal:** Consolidate STATE.md into ROADMAP.md with YAML frontmatter for quick state reading
+
+**What was done:**
+
+### Roadmap Frontmatter Types (`packages/core/src/types/roadmap-frontmatter.ts`)
+
+- `ProjectStatus` - Status enum: planning, executing, verifying, blocked, complete
+- `VelocityMetrics` - Execution speed tracking
+- `RoadmapFrontmatter` - Full YAML schema for ROADMAP.md frontmatter
+  - Version, project, milestone
+  - Current phase/plan position
+  - Progress tracking (total/completed phases and plans)
+  - Optional velocity metrics
+  - Spec-centric fields (spec_dir, spec_id)
+- `DEFAULT_ROADMAP_FRONTMATTER` - Default values for new projects
+- Helper functions: `calculateProgress()`, `isProjectComplete()`
+
+### YAML Frontmatter Parser (`packages/core/src/frontmatter-parser.ts`)
+
+- `parseFrontmatter<T>()` - Generic frontmatter extraction
+- `extractContentAfterFrontmatter()` - Get markdown without frontmatter
+- `createFrontmatter()` - Serialize object to YAML frontmatter
+- `updateFrontmatter<T>()` - Update existing frontmatter
+- `parseRoadmapFrontmatter()` - Typed ROADMAP.md parsing with validation
+- Internal `parseYaml<T>()` - Simple YAML parser for frontmatter
+- Internal `serializeYaml()` - Object to YAML serialization
+
+### Updated GSD State Parser (`packages/core/src/gsd-state-parser.ts`)
+
+- Added `fromFrontmatter` field to `ParsedGsdState`
+- `parseRoadmapFile()` now checks YAML frontmatter first (faster path)
+- Falls back to content parsing if no frontmatter present
+- Added `mapProjectStatus()` helper for status display
+
+### Updated State Types (`packages/core/src/types/gsd-state.ts`)
+
+- Added `frontmatter?: RoadmapFrontmatter` field to `GsdState`
+- Re-exports frontmatter types for convenience
+
+**ROADMAP.md Frontmatter Schema:**
+
+```yaml
+---
+version: 1
+project: my-project
+milestone: v1.0
+
+current_phase: 3
+current_plan: 2
+status: executing
+
+total_phases: 7
+completed_phases: 2
+total_plans: 18
+completed_plans: 8
+
+velocity:
+  total_plans_completed: 8
+  total_execution_minutes: 45
+  average_minutes_per_plan: 6
+---
+```
+
+**Migration:** STATE.md position/progress → ROADMAP.md frontmatter
 
 **Files created:** 2 new TypeScript files
 **Files modified:** 3 existing TypeScript files

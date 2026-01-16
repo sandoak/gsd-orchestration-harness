@@ -8,6 +8,7 @@ export * from './types/events.js';
 export * from './types/worker-messages.js';
 export * from './types/orchestrator-messages.js';
 export * from './types/protocol.js';
+export * from './types/roadmap-frontmatter.js';
 
 // Constants
 export * from './constants.js';
@@ -15,3 +16,4 @@ export * from './constants.js';
 // Parsers
 export * from './gsd-state-parser.js';
 export * from './checkpoint-parser.js';
+export * from './frontmatter-parser.js';

@@ -2,12 +2,14 @@
  * GSD State Parser - Parses GSD project state from .planning/ files.
  *
  * Extracts state from STATE.md, ROADMAP.md, and current PLAN.md using regex patterns.
+ * Supports YAML frontmatter in ROADMAP.md for quick state reading.
  * Per CONTEXT.md: MVP regex approach, not full AST parsing.
  */
 
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { basename, join } from 'node:path';
 
+import { parseRoadmapFrontmatter } from './frontmatter-parser.js';
 import type { GsdPhase, GsdState } from './types/gsd-state.js';
 
 /**
@@ -32,6 +34,8 @@ export interface ParsedGsdState extends GsdState {
   currentPlanTasks: number;
   /** Whether current plan has checkpoints */
   currentPlanHasCheckpoints: boolean;
+  /** Whether state was loaded from frontmatter (faster) vs parsed from content */
+  fromFrontmatter: boolean;
 }
 
 /**
@@ -68,13 +72,16 @@ export class GsdStateParser {
       plansInCurrentPhase: 0,
       currentPlanTasks: 0,
       currentPlanHasCheckpoints: false,
+      fromFrontmatter: false,
     };
 
-    // Parse STATE.md
-    this.parseStateFile(state);
-
-    // Parse ROADMAP.md
+    // Parse ROADMAP.md first (may have frontmatter with state)
     this.parseRoadmapFile(state);
+
+    // Only parse STATE.md if we didn't get state from frontmatter
+    if (!state.fromFrontmatter) {
+      this.parseStateFile(state);
+    }
 
     // Parse current PLAN.md
     this.parseCurrentPlan(state);
@@ -161,6 +168,7 @@ export class GsdStateParser {
 
   /**
    * Parses ROADMAP.md for phases and their statuses.
+   * Checks for YAML frontmatter first for quick state reading.
    */
   private parseRoadmapFile(state: ParsedGsdState): void {
     const roadmapFile = join(this.planningDir, 'ROADMAP.md');
@@ -169,6 +177,30 @@ export class GsdStateParser {
     }
 
     const content = readFileSync(roadmapFile, 'utf-8');
+
+    // Try to parse frontmatter first (faster path)
+    const frontmatter = parseRoadmapFrontmatter(content);
+    if (frontmatter) {
+      state.frontmatter = frontmatter;
+      state.fromFrontmatter = true;
+
+      // Populate state from frontmatter
+      if (frontmatter.project) {
+        state.projectName = frontmatter.project;
+      }
+      state.currentPhase = frontmatter.current_phase;
+      state.currentPlan = frontmatter.current_plan;
+      state.totalPhases = frontmatter.total_phases;
+      state.progress =
+        frontmatter.total_plans > 0
+          ? Math.round((frontmatter.completed_plans / frontmatter.total_plans) * 100)
+          : 0;
+
+      // Map project status to status string
+      state.status = this.mapProjectStatus(frontmatter.status);
+    }
+
+    // Still parse phases from content for detailed info
     const phases: GsdPhase[] = [];
 
     // Match phase lines: - [x] **Phase N: Name** or - [ ] **Phase N: Name**
@@ -202,6 +234,20 @@ export class GsdStateParser {
     if (phases.length > 0 && state.totalPhases === 0) {
       state.totalPhases = phases.length;
     }
+  }
+
+  /**
+   * Maps ProjectStatus to display string.
+   */
+  private mapProjectStatus(status: string): string {
+    const statusMap: Record<string, string> = {
+      planning: 'Planning',
+      executing: 'Executing',
+      verifying: 'Verifying',
+      blocked: 'Blocked',
+      complete: 'Complete',
+    };
+    return statusMap[status] ?? status;
   }
 
   /**

@@ -1,4 +1,5 @@
 import type { CheckpointInfo } from './checkpoint.js';
+import type { RoadmapFrontmatter, ProjectStatus, VelocityMetrics } from './roadmap-frontmatter.js';
 
 export interface GsdPhase {
   number: number;
@@ -24,4 +25,10 @@ export interface GsdState {
   phases: GsdPhase[];
   hasCheckpoint: boolean;
   checkpoint?: CheckpointInfo;
+
+  /** ROADMAP.md frontmatter (if available) */
+  frontmatter?: RoadmapFrontmatter;
 }
+
+// Re-export frontmatter types for convenience
+export type { RoadmapFrontmatter, ProjectStatus, VelocityMetrics };
