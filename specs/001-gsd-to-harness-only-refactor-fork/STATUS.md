@@ -21,15 +21,36 @@ The comprehensive SPEC.md has been finalized with:
 
 From SPEC.md:
 
-| Phase | Goal                               | Status  |
-| ----- | ---------------------------------- | ------- |
-| 0     | Fork GSD Skills → Harness Commands | Pending |
-| 1     | Worker Message Protocol            | Pending |
-| 2     | File-Based Protocol Directory      | Pending |
-| 3     | Project State Documents            | Pending |
-| 4     | Verification System                | Pending |
-| 5     | Worker Instructions Template       | Pending |
-| 6     | Migration and Cleanup              | Pending |
+| Phase | Goal                               | Status   | Commit  |
+| ----- | ---------------------------------- | -------- | ------- |
+| 0     | Fork GSD Skills → Harness Commands | Complete | d1aa4f8 |
+| 1     | Worker Message Protocol            | Pending  |         |
+| 2     | File-Based Protocol Directory      | Pending  |         |
+| 3     | Project State Documents            | Pending  |         |
+| 4     | Verification System                | Pending  |         |
+| 5     | Worker Instructions Template       | Pending  |         |
+| 6     | Migration and Cleanup              | Pending  |         |
+
+## Phase 0 Complete
+
+**Commit:** d1aa4f8
+**Date:** 2026-01-16
+
+**What was done:**
+
+- Created `packages/harness-skills/` package
+- Forked `gsd-planner.md` → `harness-planner.md` (1320 lines)
+- Forked `gsd-researcher.md` → `harness-researcher.md` (916 lines)
+- Forked 21 workflow files with `/gsd:*` → `/harness:*` renames
+- Forked templates and references
+- Renamed all MCP tools from `gsd_*` to `harness_*`
+- Renamed `GsdMcpServer` to `HarnessMcpServer`
+- Updated server name from `gsd-harness` to `harness`
+
+**Files created:** 73 new files in `packages/harness-skills/`
+**Files modified:** 20 TypeScript files in existing packages
+
+---
 
 ## Source Files for Fork
 
