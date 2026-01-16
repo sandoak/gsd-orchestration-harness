@@ -3,14 +3,14 @@ version: 1
 project: taskflow
 milestone: mvp
 
-current_phase: 1
+current_phase: 2
 current_plan: 3
 status: executing
 
 total_phases: 4
-completed_phases: 1
+completed_phases: 2
 total_plans: 10
-completed_plans: 3
+completed_plans: 6
 
 spec_dir: specs/SPC-001-taskflow-mvp
 spec_id: SPC-001
@@ -76,9 +76,9 @@ packages:
 | 02-02 | Task endpoints | 02-01      | 2    | packages/api/src/routes/\* |
 | 02-03 | API tests      | 02-01      | 2    | packages/api/tests/\*      |
 
-- [ ] 02-01-PLAN.md: Database layer (credentials_needed: sqlite)
-- [ ] 02-02-PLAN.md: Task endpoints
-- [ ] 02-03-PLAN.md: API tests
+- [x] 02-01-PLAN.md: Database layer (credentials_needed: sqlite)
+- [x] 02-02-PLAN.md: Task endpoints
+- [x] 02-03-PLAN.md: API tests
 
 ### Credentials
 
