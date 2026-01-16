@@ -2,6 +2,7 @@ import cors from 'cors';
 import express, { Express } from 'express';
 
 import { createTables, initializeDatabase } from './db/index.js';
+import taskRoutes from './routes/tasks.js';
 
 const app: Express = express();
 const PORT = process.env.PORT || 3001;
@@ -18,10 +19,8 @@ app.get('/api/health', (_req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
-// Placeholder for task routes (added in Phase 2)
-app.get('/api/tasks', (_req, res) => {
-  res.json({ data: [], message: 'Task routes not yet implemented' });
-});
+// Task routes
+app.use('/api/tasks', taskRoutes);
 
 app.listen(PORT, () => {
   // eslint-disable-next-line no-console

@@ -1,10 +1,11 @@
 import type { Task, CreateTaskInput, UpdateTaskInput, ApiResponse } from '@taskflow/shared';
 import { Router, Request, Response } from 'express';
+import type { Router as RouterType } from 'express';
 import { v4 as uuidv4 } from 'uuid';
 
 import { db } from '../db/index.js';
 
-const router = Router();
+const router: RouterType = Router();
 
 // GET /api/tasks - List all tasks
 router.get('/', (_req: Request, res: Response<ApiResponse<Task[]>>) => {
