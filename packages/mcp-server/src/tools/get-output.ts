@@ -3,7 +3,7 @@ import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 
 /**
- * Schema for gsd_get_output tool parameters.
+ * Schema for harness_get_output tool parameters.
  */
 const getOutputSchema = {
   sessionId: z.string().optional().describe('ID of the session to get output from'),
@@ -24,7 +24,7 @@ const getOutputSchema = {
 };
 
 /**
- * Registers the gsd_get_output tool with the MCP server.
+ * Registers the harness_get_output tool with the MCP server.
  *
  * This tool retrieves output from a session with optional filtering by line count or timestamp.
  *
@@ -32,9 +32,9 @@ const getOutputSchema = {
  * @param manager - The PersistentSessionManager instance
  */
 export function registerGetOutputTool(server: McpServer, manager: PersistentSessionManager): void {
-  server.tool('gsd_get_output', getOutputSchema, async ({ sessionId, slot, lines, since }) => {
+  server.tool('harness_get_output', getOutputSchema, async ({ sessionId, slot, lines, since }) => {
     console.log(
-      `[mcp] gsd_get_output called - sessionId: ${sessionId}, slot: ${slot}, lines: ${lines}`
+      `[mcp] harness_get_output called - sessionId: ${sessionId}, slot: ${slot}, lines: ${lines}`
     );
     // Resolve session ID from slot if provided
     let resolvedSessionId = sessionId;

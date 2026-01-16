@@ -10,6 +10,7 @@ import type {
   SessionFailedEvent,
   SessionWaitingEvent,
   WaitStateType,
+  PromptIntent,
 } from '@gsd/core';
 
 import { DatabaseConnection } from './db/database.js';
@@ -47,7 +48,7 @@ const TIMEOUT_CHECK_INTERVAL = 60 * 1000;
 export interface PersistentSessionManagerOptions extends SessionManagerOptions {
   /**
    * Path to the SQLite database file.
-   * Defaults to ~/.gsd-harness/sessions.db
+   * Defaults to ~/.harness/sessions.db
    */
   dbPath?: string;
 
@@ -142,7 +143,7 @@ export class PersistentSessionManager extends EventEmitter<PersistentSessionMana
       if (session) {
         // eslint-disable-next-line no-console
         console.error(
-          `[gsd-harness] Terminating stale session ${sessionId} (not polled for ${Math.round(this.sessionTimeout / 60000)} minutes)`
+          `[harness] Terminating stale session ${sessionId} (not polled for ${Math.round(this.sessionTimeout / 60000)} minutes)`
         );
         await this.terminate(sessionId);
       }
@@ -249,7 +250,12 @@ export class PersistentSessionManager extends EventEmitter<PersistentSessionMana
    * @param sessionId - ID of the session
    * @returns Current wait state info or null if session not found or not waiting
    */
-  getSessionWaitState(sessionId: string): { waitType: WaitStateType; trigger?: string } | null {
+  getSessionWaitState(sessionId: string): {
+    waitType: WaitStateType;
+    trigger?: string;
+    promptIntent?: PromptIntent;
+    promptContext?: string;
+  } | null {
     return this.sessionManager.getSessionWaitState(sessionId);
   }
 

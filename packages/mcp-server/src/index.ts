@@ -1,17 +1,17 @@
 #!/usr/bin/env node
 /**
- * GSD MCP Server - Entry Point
+ * Harness MCP Server - Entry Point
  *
  * This is the CLI entry point for the MCP server.
- * It can be run directly or via the gsd-mcp-server binary.
+ * It can be run directly or via the harness-mcp-server binary.
  */
 
 import { PersistentSessionManager } from '@gsd/session-manager';
 
-import { GsdMcpServer } from './server.js';
+import { HarnessMcpServer } from './server.js';
 
-// Export GsdMcpServer for testing and programmatic use
-export { GsdMcpServer } from './server.js';
+// Export HarnessMcpServer for testing and programmatic use
+export { HarnessMcpServer } from './server.js';
 
 // Export tool registration functions for HTTP transport
 export { registerEndSessionTool } from './tools/end-session.js';
@@ -34,7 +34,7 @@ async function main(): Promise<void> {
   const manager = new PersistentSessionManager();
 
   // Create and start MCP server
-  const server = new GsdMcpServer(manager);
+  const server = new HarnessMcpServer(manager);
 
   // Handle graceful shutdown
   const shutdown = async (): Promise<void> => {

@@ -3,7 +3,7 @@ import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 
 /**
- * Schema for gsd_mark_phase_verified tool parameters.
+ * Schema for harness_mark_phase_verified tool parameters.
  */
 const markPhaseVerifiedSchema = {
   projectPath: z.string().describe('Absolute path to the project directory'),
@@ -11,7 +11,7 @@ const markPhaseVerifiedSchema = {
 };
 
 /**
- * Registers the gsd_mark_phase_verified tool with the MCP server.
+ * Registers the harness_mark_phase_verified tool with the MCP server.
  *
  * This tool marks all plans in a phase as verified and clears the verify gate
  * if the phase matches the pending verify phase.
@@ -24,12 +24,12 @@ export function registerMarkPhaseVerifiedTool(
   orchestrationStore: OrchestrationStore
 ): void {
   server.tool(
-    'gsd_mark_phase_verified',
+    'harness_mark_phase_verified',
     markPhaseVerifiedSchema,
     async ({ projectPath, phaseNumber }) => {
       // eslint-disable-next-line no-console
       console.log(
-        `[mcp] gsd_mark_phase_verified called - projectPath: ${projectPath}, phaseNumber: ${phaseNumber}`
+        `[mcp] harness_mark_phase_verified called - projectPath: ${projectPath}, phaseNumber: ${phaseNumber}`
       );
 
       try {
@@ -68,7 +68,7 @@ export function registerMarkPhaseVerifiedTool(
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : 'Unknown error';
         // eslint-disable-next-line no-console
-        console.error(`[mcp] gsd_mark_phase_verified error:`, error);
+        console.error(`[mcp] harness_mark_phase_verified error:`, error);
         return {
           content: [
             {

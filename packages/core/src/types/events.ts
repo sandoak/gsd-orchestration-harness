@@ -18,6 +18,17 @@ export type WaitStateType =
   | 'continue' // Press Enter to continue
   | 'unknown'; // Generic wait state
 
+/**
+ * Semantic classification of prompt intent.
+ * Helps orchestrator know HOW to respond to plain text prompts.
+ */
+export type PromptIntent =
+  | 'verification' // "Does this match?", "Is X correct?" - needs actual testing
+  | 'action-required' // "Let me know when X", "Apply migrations" - needs action
+  | 'decision' // "Select option", "Choose between" - needs choice
+  | 'completion' // Session finished, waiting for next command
+  | 'unknown'; // Unclassified prompt
+
 export interface BaseEvent {
   type: EventType;
   timestamp: Date;
@@ -49,6 +60,10 @@ export interface SessionWaitingEvent extends BaseEvent {
   menuOptions?: number;
   /** Raw output snippet that triggered the detection */
   trigger?: string;
+  /** Semantic classification of what the prompt is asking for */
+  promptIntent?: PromptIntent;
+  /** Extracted context from the prompt (e.g., what to verify, action to take) */
+  promptContext?: string;
 }
 
 export interface SessionCompletedEvent extends BaseEvent {

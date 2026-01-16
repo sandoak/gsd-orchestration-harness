@@ -3,7 +3,7 @@ import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 
 /**
- * Schema for gsd_respond_checkpoint tool parameters.
+ * Schema for harness_respond_checkpoint tool parameters.
  */
 const respondCheckpointSchema = {
   sessionId: z.string().describe('ID of the session to respond to'),
@@ -13,11 +13,11 @@ const respondCheckpointSchema = {
 };
 
 /**
- * Registers the gsd_respond_checkpoint tool with the MCP server.
+ * Registers the harness_respond_checkpoint tool with the MCP server.
  *
- * This tool sends a response to a checkpoint prompt in a GSD session.
+ * This tool sends a response to a checkpoint prompt in a Harness session.
  * The response is written to the CLI stdin. Use after detecting a checkpoint
- * with gsd_get_checkpoint.
+ * with harness_get_checkpoint.
  *
  * @param server - The MCP server instance
  * @param manager - The PersistentSessionManager instance
@@ -27,11 +27,11 @@ export function registerRespondCheckpointTool(
   manager: PersistentSessionManager
 ): void {
   server.tool(
-    'gsd_respond_checkpoint',
+    'harness_respond_checkpoint',
     respondCheckpointSchema,
     async ({ sessionId, response }) => {
       console.log(
-        `[mcp] gsd_respond_checkpoint called - sessionId: ${sessionId}, response: ${response}`
+        `[mcp] harness_respond_checkpoint called - sessionId: ${sessionId}, response: ${response}`
       );
       // Verify session exists
       const session = manager.getSession(sessionId);

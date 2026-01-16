@@ -6,7 +6,7 @@ import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 
 /**
- * Schema for gsd_sync_project_state tool parameters.
+ * Schema for harness_sync_project_state tool parameters.
  */
 const syncProjectStateSchema = {
   projectPath: z.string().describe('Absolute path to the project directory'),
@@ -143,7 +143,7 @@ async function readStateFile(projectPath: string): Promise<{ currentPhase: numbe
 }
 
 /**
- * Registers the gsd_sync_project_state tool with the MCP server.
+ * Registers the harness_sync_project_state tool with the MCP server.
  *
  * This tool scans a project's .planning/ directory and syncs the discovered
  * plans to the orchestration database. It enforces that the database reflects
@@ -156,8 +156,8 @@ export function registerSyncProjectStateTool(
   server: McpServer,
   orchestrationStore: OrchestrationStore
 ): void {
-  server.tool('gsd_sync_project_state', syncProjectStateSchema, async ({ projectPath }) => {
-    console.log(`[mcp] gsd_sync_project_state called - projectPath: ${projectPath}`);
+  server.tool('harness_sync_project_state', syncProjectStateSchema, async ({ projectPath }) => {
+    console.log(`[mcp] harness_sync_project_state called - projectPath: ${projectPath}`);
 
     try {
       // Scan filesystem for plans and verified phases
@@ -306,7 +306,7 @@ export function registerSyncProjectStateTool(
       };
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-      console.error(`[mcp] gsd_sync_project_state error:`, error);
+      console.error(`[mcp] harness_sync_project_state error:`, error);
       return {
         content: [
           {

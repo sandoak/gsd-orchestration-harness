@@ -7,23 +7,23 @@ import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 
 /**
- * Schema for gsd_get_state tool parameters.
+ * Schema for harness_get_state tool parameters.
  */
 const getStateSchema = {
-  sessionId: z.string().describe('ID of the session to get GSD state from'),
+  sessionId: z.string().describe('ID of the session to get Harness state from'),
 };
 
 /**
- * Registers the gsd_get_state tool with the MCP server.
+ * Registers the harness_get_state tool with the MCP server.
  *
- * This tool reads GSD state from the session's working directory using
+ * This tool reads Harness state from the session's working directory using
  * GsdStateParser to extract comprehensive project state from .planning/ files.
  *
  * @param server - The MCP server instance
  * @param manager - The PersistentSessionManager instance
  */
 export function registerGetStateTool(server: McpServer, manager: PersistentSessionManager): void {
-  server.tool('gsd_get_state', getStateSchema, async ({ sessionId }) => {
+  server.tool('harness_get_state', getStateSchema, async ({ sessionId }) => {
     // Verify session exists and get working directory
     const session = manager.getSession(sessionId);
     if (!session) {
@@ -42,7 +42,7 @@ export function registerGetStateTool(server: McpServer, manager: PersistentSessi
 
     const planningDir = join(session.workingDir, '.planning');
 
-    // Check if GSD project exists
+    // Check if Harness project exists
     if (!existsSync(planningDir)) {
       return {
         content: [
@@ -50,7 +50,7 @@ export function registerGetStateTool(server: McpServer, manager: PersistentSessi
             type: 'text',
             text: JSON.stringify({
               success: false,
-              error: 'No GSD project found (missing .planning/ directory)',
+              error: 'No Harness project found (missing .planning/ directory)',
             }),
           },
         ],
@@ -99,7 +99,7 @@ export function registerGetStateTool(server: McpServer, manager: PersistentSessi
             type: 'text',
             text: JSON.stringify({
               success: false,
-              error: `Failed to read GSD state: ${errorMessage}`,
+              error: `Failed to read Harness state: ${errorMessage}`,
             }),
           },
         ],

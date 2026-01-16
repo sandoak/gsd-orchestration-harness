@@ -38,7 +38,7 @@ export interface TestHarness {
  */
 export async function createTestHarness(mockScript?: string): Promise<TestHarness> {
   // Create unique temp directory for this test
-  const tempDir = join(tmpdir(), `gsd-harness-test-${randomUUID()}`);
+  const tempDir = join(tmpdir(), `harness-test-${randomUUID()}`);
   mkdirSync(tempDir, { recursive: true });
 
   // Create temp database path

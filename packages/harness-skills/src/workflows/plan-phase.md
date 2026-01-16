@@ -1,0 +1,45 @@
+# DEPRECATED: Plan-Phase Workflow
+
+**This workflow has been consolidated into the harness-planner agent.**
+
+## Migration
+
+Planning expertise is now baked into:
+
+- `agents/harness-planner.md` - Complete planning methodology
+
+The `/harness:plan-phase` command spawns the harness-planner agent directly.
+
+## Why This Changed
+
+The thin orchestrator pattern reduces main context usage:
+
+- Before: ~3,580 lines loaded into main context
+- After: ~150 lines in orchestrator, expertise in agent
+
+## Historical Reference
+
+This file previously contained:
+
+- Decimal phase numbering rules
+- Required reading list (8 reference files)
+- Planning principles and philosophy
+- Discovery level definitions (Level 0-3)
+- Project history assembly via frontmatter dependency graph
+- Gap closure mode process
+- Task breakdown with TDD detection
+- Dependency graph building
+- Wave assignment algorithm
+- Plan grouping rules
+- Scope estimation and depth calibration
+- Phase prompt writing (PLAN.md structure)
+- User setup frontmatter for external services
+- Git commit step
+- Success criteria (standard and gap closure modes)
+
+All content preserved in `agents/harness-planner.md`.
+
+---
+
+_Deprecated: 2026-01-16_
+_Replaced by: agents/harness-planner.md_

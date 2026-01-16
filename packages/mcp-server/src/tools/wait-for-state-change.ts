@@ -4,7 +4,7 @@ import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 
 /**
- * Schema for gsd_wait_for_state_change tool parameters.
+ * Schema for harness_wait_for_state_change tool parameters.
  */
 const waitForStateChangeSchema = {
   timeout: z
@@ -30,7 +30,7 @@ type StateChangeEvent =
   | { type: 'timeout'; watchedSessions: string[] };
 
 /**
- * Registers the gsd_wait_for_state_change tool with the MCP server.
+ * Registers the harness_wait_for_state_change tool with the MCP server.
  *
  * This tool blocks until a session state changes (completed/failed/waiting) or timeout.
  * Much more efficient than polling - orchestrator calls once and waits.
@@ -44,11 +44,11 @@ export function registerWaitForStateChangeTool(
   manager: PersistentSessionManager
 ): void {
   server.tool(
-    'gsd_wait_for_state_change',
+    'harness_wait_for_state_change',
     waitForStateChangeSchema,
     async ({ timeout, sessionIds }) => {
       console.log(
-        `[mcp] gsd_wait_for_state_change called - timeout: ${timeout}, sessionIds: ${sessionIds?.join(',') || 'all'}`
+        `[mcp] harness_wait_for_state_change called - timeout: ${timeout}, sessionIds: ${sessionIds?.join(',') || 'all'}`
       );
       try {
         // Determine which sessions to watch
@@ -84,7 +84,7 @@ export function registerWaitForStateChangeTool(
         const result = await waitForChange(manager, watchedSessionIds, timeout);
 
         console.log(
-          `[mcp] gsd_wait_for_state_change resolved - type: ${result.type}, sessionId: ${result.type !== 'timeout' ? result.sessionId : 'N/A'}`
+          `[mcp] harness_wait_for_state_change resolved - type: ${result.type}, sessionId: ${result.type !== 'timeout' ? result.sessionId : 'N/A'}`
         );
 
         if (result.type === 'timeout') {
@@ -135,6 +135,8 @@ export function registerWaitForStateChangeTool(
                     waitType: result.event.waitType,
                     menuOptions: result.event.menuOptions,
                     trigger: result.event.trigger,
+                    promptIntent: result.event.promptIntent,
+                    promptContext: result.event.promptContext,
                   }),
                 },
                 session: changedSession
@@ -193,7 +195,7 @@ function waitForChange(
       const waitState = manager.getSessionWaitState(sessionId);
       if (waitState) {
         console.log(
-          `[wait-for-state-change] Session ${sessionId} already in wait state: ${waitState.waitType}`
+          `[wait-for-state-change] Session ${sessionId} already in wait state: ${waitState.waitType}, intent: ${waitState.promptIntent}`
         );
         resolve({
           type: 'waiting',
@@ -204,6 +206,8 @@ function waitForChange(
             sessionId,
             waitType: waitState.waitType,
             trigger: waitState.trigger,
+            promptIntent: waitState.promptIntent,
+            promptContext: waitState.promptContext,
           },
         });
         return;

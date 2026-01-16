@@ -17,12 +17,12 @@ import { registerWaitForStateChangeTool } from './tools/wait-for-state-change.js
 const SERVER_VERSION = '0.1.0';
 
 /**
- * GsdMcpServer provides MCP tools for Claude Code to orchestrate GSD sessions.
+ * HarnessMcpServer provides MCP tools for Claude Code to orchestrate Harness sessions.
  *
  * This server uses stdio transport for integration with Claude Code.
  * Tools will be registered in subsequent plans (03-02, 03-03).
  */
-export class GsdMcpServer {
+export class HarnessMcpServer {
   private server: McpServer;
   private manager: PersistentSessionManager;
   private transport: StdioServerTransport | null = null;
@@ -31,7 +31,7 @@ export class GsdMcpServer {
     this.manager = manager;
     this.server = new McpServer(
       {
-        name: 'gsd-harness',
+        name: 'harness',
         version: SERVER_VERSION,
       },
       {

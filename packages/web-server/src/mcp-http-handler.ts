@@ -50,7 +50,7 @@ interface McpSession {
 function createMcpServer(manager: PersistentSessionManager): McpServer {
   const server = new McpServer(
     {
-      name: 'gsd-harness',
+      name: 'harness',
       version: SERVER_VERSION,
     },
     {

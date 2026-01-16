@@ -5,7 +5,7 @@ import { z } from 'zod';
 import { setHighestExecutedPhase } from './start-session.js';
 
 /**
- * Schema for gsd_set_execution_state tool parameters.
+ * Schema for harness_set_execution_state tool parameters.
  */
 const setExecutionStateSchema = {
   projectPath: z.string().describe('Path to the project'),
@@ -35,7 +35,7 @@ const setExecutionStateSchema = {
 };
 
 /**
- * Registers the gsd_set_execution_state tool with the MCP server.
+ * Registers the harness_set_execution_state tool with the MCP server.
  *
  * This tool allows the orchestrator to initialize/reconcile the harness with
  * the current execution state after reading ROADMAP.md and STATE.md.
@@ -52,7 +52,7 @@ export function registerSetExecutionStateTool(
   orchestrationStore: OrchestrationStore
 ): void {
   server.tool(
-    'gsd_set_execution_state',
+    'harness_set_execution_state',
     setExecutionStateSchema,
     async ({
       projectPath,
@@ -62,7 +62,7 @@ export function registerSetExecutionStateTool(
       forceReset,
     }) => {
       console.log(
-        `[mcp] gsd_set_execution_state called - projectPath: ${projectPath}, ` +
+        `[mcp] harness_set_execution_state called - projectPath: ${projectPath}, ` +
           `highestExecutedPhase: ${highestExecutedPhase}, ` +
           `highestExecutingPhase: ${highestExecutingPhase ?? 'not set'}, ` +
           `highestExecutingPlan: ${highestExecutingPlan ?? 'not set'}, ` +

@@ -3,7 +3,7 @@ import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 
 /**
- * Schema for gsd_start_session tool parameters.
+ * Schema for harness_start_session tool parameters.
  */
 const startSessionSchema = {
   workingDir: z.string().describe('Path to the project working directory'),
@@ -89,7 +89,7 @@ export function getHighestExecutedPhase(): number {
 }
 
 /**
- * Registers the gsd_start_session tool with the MCP server.
+ * Registers the harness_start_session tool with the MCP server.
  *
  * PHYSICAL BARRIERS ENFORCED:
  * 1. Only 1 execute at a time (prevents codebase conflicts)
@@ -103,8 +103,10 @@ export function registerStartSessionTool(
   server: McpServer,
   manager: PersistentSessionManager
 ): void {
-  server.tool('gsd_start_session', startSessionSchema, async ({ workingDir, command }) => {
-    console.log(`[mcp] gsd_start_session called - workingDir: ${workingDir}, command: ${command}`);
+  server.tool('harness_start_session', startSessionSchema, async ({ workingDir, command }) => {
+    console.log(
+      `[mcp] harness_start_session called - workingDir: ${workingDir}, command: ${command}`
+    );
 
     const orchestrationStore = manager.orchestrationStore;
 

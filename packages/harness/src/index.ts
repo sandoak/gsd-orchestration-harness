@@ -12,7 +12,7 @@
  * - Real-time session event streaming via WebSocket (/ws)
  *
  * Dev Mode:
- * - When running from a git checkout (not ~/.gsd-harness), dev mode is detected
+ * - When running from a git checkout (not ~/.harness), dev mode is detected
  * - Dev mode refuses to start if production harness is already running
  * - Override with GSD_DEV_SERVER=true to run a separate dev server
  */
@@ -38,12 +38,12 @@ const DEFAULT_PORT = 3333;
 /**
  * Production harness installation directory.
  */
-const PRODUCTION_DIR = path.join(os.homedir(), '.gsd-harness');
+const PRODUCTION_DIR = path.join(os.homedir(), '.harness');
 
 /**
  * Environment variable set in child sessions to prevent harness from starting.
  * When Claude CLI is spawned by the harness, it inherits .mcp.json which includes
- * gsd-harness. Without this check, the child would try to start another harness
+ * harness. Without this check, the child would try to start another harness
  * instance, causing port conflicts and failures.
  */
 const HARNESS_CHILD_ENV = 'GSD_HARNESS_CHILD';
@@ -58,7 +58,7 @@ const DEV_SERVER_ENV = 'GSD_DEV_SERVER';
  */
 function log(message: string): void {
   // eslint-disable-next-line no-console -- CLI output
-  console.error(`[gsd-harness] ${message}`);
+  console.error(`[harness] ${message}`);
 }
 
 /**
@@ -136,7 +136,7 @@ async function main(): Promise<void> {
         log('');
         log('Your dev changes will be used after:');
         log('  1. Push to GitHub');
-        log('  2. Run: ~/.gsd-harness/scripts/setup-machine.sh');
+        log('  2. Run: ~/.harness/scripts/setup-machine.sh');
         log('');
         log('To query production harness from dev:');
         log('  curl http://localhost:' + DEFAULT_PORT + '/api/projects');

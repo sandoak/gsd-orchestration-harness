@@ -31,8 +31,8 @@ CREATE INDEX IF NOT EXISTS idx_outputs_session_id ON session_outputs(session_id)
 CREATE INDEX IF NOT EXISTS idx_outputs_timestamp ON session_outputs(session_id, timestamp);
 `;
 
-// Use data subdirectory to avoid conflict with harness installation at ~/.gsd-harness
-const DEFAULT_DB_DIR = join(homedir(), '.gsd-harness', 'data');
+// Use data subdirectory to avoid conflict with harness installation at ~/.harness
+const DEFAULT_DB_DIR = join(homedir(), '.harness', 'data');
 const DEFAULT_DB_PATH = join(DEFAULT_DB_DIR, 'sessions.db');
 
 /**
@@ -45,7 +45,7 @@ export class DatabaseConnection {
 
   /**
    * Creates a new database connection.
-   * @param dbPath - Path to the database file. Defaults to ~/.gsd-harness/sessions.db
+   * @param dbPath - Path to the database file. Defaults to ~/.harness/sessions.db
    */
   constructor(dbPath?: string) {
     this.dbPath = dbPath ?? DEFAULT_DB_PATH;

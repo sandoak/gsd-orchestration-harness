@@ -3,14 +3,14 @@ import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 
 /**
- * Schema for gsd_end_session tool parameters.
+ * Schema for harness_end_session tool parameters.
  */
 const endSessionSchema = {
   sessionId: z.string().describe('ID of the session to terminate'),
 };
 
 /**
- * Registers the gsd_end_session tool with the MCP server.
+ * Registers the harness_end_session tool with the MCP server.
  *
  * This tool terminates a running session by its ID.
  * Validates that the session exists and is in a running state.
@@ -19,7 +19,7 @@ const endSessionSchema = {
  * @param manager - The PersistentSessionManager instance
  */
 export function registerEndSessionTool(server: McpServer, manager: PersistentSessionManager): void {
-  server.tool('gsd_end_session', endSessionSchema, async ({ sessionId }) => {
+  server.tool('harness_end_session', endSessionSchema, async ({ sessionId }) => {
     try {
       // Get session to verify it exists
       const session = manager.getSession(sessionId);

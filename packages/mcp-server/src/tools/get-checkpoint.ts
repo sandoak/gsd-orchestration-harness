@@ -5,7 +5,7 @@ import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 
 /**
- * Schema for gsd_get_checkpoint tool parameters.
+ * Schema for harness_get_checkpoint tool parameters.
  */
 const getCheckpointSchema = {
   sessionId: z.string().describe('ID of the session to check for checkpoints'),
@@ -77,7 +77,7 @@ function extractCheckpointContent(output: string): string | undefined {
 }
 
 /**
- * Registers the gsd_get_checkpoint tool with the MCP server.
+ * Registers the harness_get_checkpoint tool with the MCP server.
  *
  * This tool detects if a session is at a checkpoint and returns parsed
  * CheckpointInfo with typed fields for each checkpoint type.
@@ -89,7 +89,7 @@ export function registerGetCheckpointTool(
   server: McpServer,
   manager: PersistentSessionManager
 ): void {
-  server.tool('gsd_get_checkpoint', getCheckpointSchema, async ({ sessionId }) => {
+  server.tool('harness_get_checkpoint', getCheckpointSchema, async ({ sessionId }) => {
     // Verify session exists
     const session = manager.getSession(sessionId);
     if (!session) {
