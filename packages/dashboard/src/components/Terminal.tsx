@@ -23,6 +23,7 @@ export const Terminal = forwardRef<TerminalHandle, TerminalProps>(
     const terminalRef = useRef<XTerm | null>(null);
     const fitAddonRef = useRef<FitAddon | null>(null);
     const lastWrittenIndexRef = useRef(0);
+    const isAtBottomRef = useRef(true); // Track if user is scrolled to bottom
 
     // Subscribe to session output from the store
     const { output } = useSessionOutput(sessionId);
@@ -42,6 +43,11 @@ export const Terminal = forwardRef<TerminalHandle, TerminalProps>(
 
       try {
         fitAddon.fit();
+
+        // Keep scroll at bottom after resize (only if user was at bottom)
+        if (isAtBottomRef.current) {
+          terminal?.scrollToBottom();
+        }
 
         // Notify backend of new dimensions so PTY can be resized
         if (terminal && sessionId) {
@@ -123,6 +129,16 @@ export const Terminal = forwardRef<TerminalHandle, TerminalProps>(
       terminalRef.current = terminal;
       fitAddonRef.current = fitAddon;
 
+      // Track scroll position to enable smart auto-scroll
+      // Only auto-scroll if user is at (or near) the bottom
+      const scrollDisposable = terminal.onScroll(() => {
+        const buffer = terminal.buffer.active;
+        const viewportY = buffer.viewportY;
+        const baseY = buffer.baseY;
+        // Consider "at bottom" if within 3 lines of the end
+        isAtBottomRef.current = viewportY >= baseY - 3;
+      });
+
       // Fit terminal to container (deferred to ensure layout is complete)
       window.requestAnimationFrame(() => {
         safeFit();
@@ -137,6 +153,7 @@ export const Terminal = forwardRef<TerminalHandle, TerminalProps>(
       // Cleanup
       return () => {
         window.removeEventListener('resize', handleResize);
+        scrollDisposable.dispose();
         terminal.dispose();
         terminalRef.current = null;
         fitAddonRef.current = null;
@@ -166,6 +183,8 @@ export const Terminal = forwardRef<TerminalHandle, TerminalProps>(
       // Get new lines since last written index
       const newLines = output.slice(lastWrittenIndexRef.current);
 
+      if (newLines.length === 0) return;
+
       // Write each new chunk to the terminal
       // Output may contain embedded newlines, use write() to let terminal handle line endings
       for (const chunk of newLines) {
@@ -174,6 +193,11 @@ export const Terminal = forwardRef<TerminalHandle, TerminalProps>(
 
       // Update the last written index
       lastWrittenIndexRef.current = output.length;
+
+      // Scroll to bottom after writing new content (only if user was at bottom)
+      if (isAtBottomRef.current) {
+        terminal.scrollToBottom();
+      }
     }, [output]);
 
     return (
