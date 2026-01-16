@@ -17,14 +17,18 @@ export { HarnessMcpServer } from './server.js';
 export { registerEndSessionTool } from './tools/end-session.js';
 export { registerGetCheckpointTool } from './tools/get-checkpoint.js';
 export { registerGetOutputTool } from './tools/get-output.js';
+export { registerGetPendingTool } from './tools/get-pending.js';
 export { registerGetStateTool } from './tools/get-state.js';
 export { registerListSessionsTool } from './tools/list-sessions.js';
 export { registerMarkPhaseVerifiedTool } from './tools/mark-phase-verified.js';
 export { registerRespondCheckpointTool } from './tools/respond-checkpoint.js';
+export { registerRespondTool } from './tools/respond.js';
 export { registerSetExecutionStateTool } from './tools/set-execution-state.js';
 export { registerStartSessionTool } from './tools/start-session.js';
 export { registerSyncProjectStateTool } from './tools/sync-project-state.js';
 export { registerWaitForStateChangeTool } from './tools/wait-for-state-change.js';
+export { registerWorkerAwaitTool } from './tools/worker-await.js';
+export { registerWorkerReportTool } from './tools/worker-report.js';
 
 /**
  * Main entry point - creates manager and server, handles shutdown.

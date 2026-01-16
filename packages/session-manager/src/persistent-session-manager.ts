@@ -14,6 +14,7 @@ import type {
 } from '@gsd/core';
 
 import { DatabaseConnection } from './db/database.js';
+import { MessageStore } from './db/message-store.js';
 import { OrchestrationStore } from './db/orchestration-store.js';
 import { OutputStore } from './db/output-store.js';
 import { SessionStore } from './db/session-store.js';
@@ -83,6 +84,7 @@ export class PersistentSessionManager extends EventEmitter<PersistentSessionMana
   private sessionStore: SessionStore;
   private outputStore: OutputStore;
   private _orchestrationStore: OrchestrationStore;
+  private _messageStore: MessageStore;
   private sessionManager: SessionManager;
   private timeoutChecker: ReturnType<typeof setInterval> | null = null;
   private sessionTimeout: number;
@@ -95,6 +97,7 @@ export class PersistentSessionManager extends EventEmitter<PersistentSessionMana
     this.sessionStore = new SessionStore(this.dbConnection.db);
     this.outputStore = new OutputStore(this.dbConnection.db);
     this._orchestrationStore = new OrchestrationStore(this.dbConnection.db);
+    this._messageStore = new MessageStore(this.dbConnection.db);
 
     // Initialize inner session manager
     this.sessionManager = new SessionManager({
@@ -319,6 +322,13 @@ export class PersistentSessionManager extends EventEmitter<PersistentSessionMana
    */
   get orchestrationStore(): OrchestrationStore {
     return this._orchestrationStore;
+  }
+
+  /**
+   * Gets the message store for worker-orchestrator communication.
+   */
+  get messageStore(): MessageStore {
+    return this._messageStore;
   }
 
   /**

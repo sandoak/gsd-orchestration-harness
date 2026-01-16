@@ -24,7 +24,7 @@ From SPEC.md:
 | Phase | Goal                               | Status   | Commit  |
 | ----- | ---------------------------------- | -------- | ------- |
 | 0     | Fork GSD Skills → Harness Commands | Complete | d1aa4f8 |
-| 1     | Worker Message Protocol            | Pending  |         |
+| 1     | Worker Message Protocol            | Complete | pending |
 | 2     | File-Based Protocol Directory      | Pending  |         |
 | 3     | Project State Documents            | Pending  |         |
 | 4     | Verification System                | Pending  |         |
@@ -49,6 +49,49 @@ From SPEC.md:
 
 **Files created:** 73 new files in `packages/harness-skills/`
 **Files modified:** 20 TypeScript files in existing packages
+
+---
+
+## Phase 1 Complete
+
+**Commit:** pending
+**Date:** 2026-01-16
+
+**Goal:** Add explicit worker-to-orchestrator messaging via MCP tools
+
+**What was done:**
+
+### Core Types
+
+- Created `packages/core/src/types/worker-messages.ts` - Worker message type definitions
+  - `WorkerMessageType`: session_ready, task_started, progress_update, verification_needed, decision_needed, action_needed, task_completed, task_failed
+  - Typed interfaces for each message type with appropriate payloads
+- Created `packages/core/src/types/orchestrator-messages.ts` - Orchestrator response types
+  - `OrchestratorMessageType`: assign_task, verification_result, decision_made, action_completed, abort_task
+  - Typed interfaces for each response type
+
+### Database Layer
+
+- Updated `packages/session-manager/src/db/database.ts` - Added worker_messages and orchestrator_messages tables
+- Created `packages/session-manager/src/db/message-store.ts` - SQLite message persistence
+  - CRUD operations for worker messages
+  - CRUD operations for orchestrator messages
+  - Checkpoint response convenience methods
+
+### MCP Tools (Worker-Orchestrator Protocol)
+
+- `harness_worker_report` - Worker reports status/checkpoints to orchestrator
+- `harness_worker_await` - Worker waits for orchestrator response after checkpoint
+- `harness_respond` - Orchestrator responds to worker messages
+- `harness_get_pending` - Orchestrator polls for pending worker messages
+
+### Integration
+
+- Added MessageStore to PersistentSessionManager
+- Registered all new tools in server.ts and index.ts
+
+**Files created:** 6 new TypeScript files
+**Files modified:** 6 existing TypeScript files
 
 ---
 

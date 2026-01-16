@@ -5,11 +5,15 @@ import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { registerEndSessionTool } from './tools/end-session.js';
 import { registerGetCheckpointTool } from './tools/get-checkpoint.js';
 import { registerGetOutputTool } from './tools/get-output.js';
+import { registerGetPendingTool } from './tools/get-pending.js';
 import { registerGetStateTool } from './tools/get-state.js';
 import { registerListSessionsTool } from './tools/list-sessions.js';
 import { registerRespondCheckpointTool } from './tools/respond-checkpoint.js';
+import { registerRespondTool } from './tools/respond.js';
 import { registerStartSessionTool } from './tools/start-session.js';
 import { registerWaitForStateChangeTool } from './tools/wait-for-state-change.js';
+import { registerWorkerAwaitTool } from './tools/worker-await.js';
+import { registerWorkerReportTool } from './tools/worker-report.js';
 
 /**
  * MCP server version - should match package.json.
@@ -60,11 +64,20 @@ export class HarnessMcpServer {
     registerGetStateTool(this.server, this.manager);
     registerGetCheckpointTool(this.server, this.manager);
 
-    // 05-03: Checkpoint response tool
+    // 05-03: Checkpoint response tool (legacy - for output parsing)
     registerRespondCheckpointTool(this.server, this.manager);
 
     // Efficient monitoring tool (reduces polling context burn)
     registerWaitForStateChangeTool(this.server, this.manager);
+
+    // Phase 1: Worker message protocol tools
+    // Worker-side tools (used by Claude workers)
+    registerWorkerReportTool(this.server, this.manager);
+    registerWorkerAwaitTool(this.server, this.manager);
+
+    // Orchestrator-side tools (used by orchestrator)
+    registerRespondTool(this.server, this.manager);
+    registerGetPendingTool(this.server, this.manager);
   }
 
   /**

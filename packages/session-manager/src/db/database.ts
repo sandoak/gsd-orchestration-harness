@@ -29,6 +29,42 @@ CREATE TABLE IF NOT EXISTS session_outputs (
 
 CREATE INDEX IF NOT EXISTS idx_outputs_session_id ON session_outputs(session_id);
 CREATE INDEX IF NOT EXISTS idx_outputs_timestamp ON session_outputs(session_id, timestamp);
+
+-- Worker messages for structured communication protocol
+CREATE TABLE IF NOT EXISTS worker_messages (
+  id TEXT PRIMARY KEY,
+  session_id TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+  message_type TEXT NOT NULL CHECK (message_type IN (
+    'session_ready', 'task_started', 'progress_update',
+    'verification_needed', 'decision_needed', 'action_needed',
+    'task_completed', 'task_failed'
+  )),
+  payload TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'responded', 'expired')),
+  created_at TEXT DEFAULT (datetime('now')),
+  responded_at TEXT,
+  response TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_worker_messages_session_id ON worker_messages(session_id);
+CREATE INDEX IF NOT EXISTS idx_worker_messages_status ON worker_messages(status);
+CREATE INDEX IF NOT EXISTS idx_worker_messages_pending ON worker_messages(session_id, status) WHERE status = 'pending';
+
+-- Orchestrator messages for responses to workers
+CREATE TABLE IF NOT EXISTS orchestrator_messages (
+  id TEXT PRIMARY KEY,
+  session_id TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+  message_type TEXT NOT NULL CHECK (message_type IN (
+    'assign_task', 'verification_result', 'decision_made',
+    'action_completed', 'abort_task'
+  )),
+  payload TEXT NOT NULL,
+  in_response_to TEXT REFERENCES worker_messages(id),
+  created_at TEXT DEFAULT (datetime('now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_orchestrator_messages_session_id ON orchestrator_messages(session_id);
+CREATE INDEX IF NOT EXISTS idx_orchestrator_messages_response_to ON orchestrator_messages(in_response_to);
 `;
 
 // Use data subdirectory to avoid conflict with harness installation at ~/.harness

@@ -5,6 +5,8 @@ export * from './types/session.js';
 export * from './types/gsd-state.js';
 export * from './types/checkpoint.js';
 export * from './types/events.js';
+export * from './types/worker-messages.js';
+export * from './types/orchestrator-messages.js';
 
 // Constants
 export * from './constants.js';

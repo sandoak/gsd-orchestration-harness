@@ -8,3 +8,8 @@ export {
   type PhasePlan,
   type PlanStatus,
 } from './orchestration-store.js';
+export {
+  MessageStore,
+  type WorkerMessageCreateInput,
+  type OrchestratorMessageCreateInput,
+} from './message-store.js';
