@@ -415,13 +415,28 @@ Phase 7 (@sandoak/email): RESEARCH FIRST - external service integration (Resend/
 
 This prevents rushing into planning phases that have unknowns that could derail execution.
 
-**Execution Queue:**
+**Execution Queue (Wave-Aware):**
+
+Plans include wave metadata in frontmatter. Build queue ordered by wave:
+
+```bash
+# Extract wave number from plan frontmatter
+grep "^wave:" "$PLAN_PATH" | cut -d: -f2 | tr -d ' '
+```
 
 ```
-[0] /gsd:execute-plan .planning/phases/01-xxx/01-01-PLAN.md
-[1] /gsd:execute-plan .planning/phases/01-xxx/01-02-PLAN.md
+Wave 1 (independent - execute in order):
+[0] /gsd:execute-plan .planning/phases/01-xxx/01-01-PLAN.md  (wave: 1)
+[1] /gsd:execute-plan .planning/phases/01-xxx/01-02-PLAN.md  (wave: 1)
+
+Wave 2 (depends on Wave 1):
+[2] /gsd:execute-plan .planning/phases/01-xxx/01-03-PLAN.md  (wave: 2)
 ...
 ```
+
+**Wave ordering matters:** Execute all Wave 1 plans before Wave 2 plans.
+Plans in the same wave are independent and could theoretically run in parallel,
+but we execute them sequentially for plan-level verification granularity.
 
 **Verification Queue (TWO LEVELS):**
 
@@ -677,6 +692,7 @@ One tool call replaces dozens of polling calls. Much more efficient!
    - **Execute CAN and SHOULD run in parallel with verify!**
    - Check `limits.maxExecutePhase` from sync - if phase ≤ maxExecutePhase, START IT
    - Only ONE execute at a time (harness enforces this)
+   - **Respect wave order:** Execute Wave 1 plans before Wave 2 (check `wave:` in frontmatter)
 
    **PRIORITY 4: PLAN (with RESEARCH DECISION)**
    If planning queue has work:
@@ -1456,7 +1472,39 @@ Respond with:
 - All 4 slots can be busy simultaneously with any task type
 - Priority order ensures verify and reconcile run when needed
 - Pipeline: Execute → Reconcile → Execute → ... → Verify → Unlock next phase
-  </guidelines>
+
+**Wave Metadata and Alternative Approaches:**
+
+GSD v1.5.17 introduced wave-based planning with `wave:`, `depends_on:`, `files_modified:` in plan frontmatter. This enables two execution strategies:
+
+| Strategy                  | Command                    | Parallelism                     | Verification             |
+| ------------------------- | -------------------------- | ------------------------------- | ------------------------ |
+| **Current (Recommended)** | `/gsd:execute-plan [path]` | Sequential plans, harness slots | Plan-level + Phase-level |
+| **Alternative (Speed)**   | `/gsd:execute-phase X`     | Wave-based internal parallelism | Phase-level only         |
+
+**Current approach (this template):**
+
+- Orchestrator runs individual plans via `/gsd:execute-plan`
+- Verify each plan before executing the next
+- Reconcile between plans
+- Maximum quality control, catches issues early
+
+**Alternative approach (for speed-focused projects):**
+
+- Orchestrator runs `/gsd:execute-phase X` in a slot
+- GSD's execute-phase uses Task tool to spawn subagents for parallel wave execution
+- Only phase-level verification at the end
+- Faster but less granular issue detection
+
+**When to consider the alternative:**
+
+- Large phases with many independent plans (Wave 1 has 4+ plans)
+- High confidence in plan quality (mature codebase, established patterns)
+- Time-critical delivery where speed > granular verification
+
+**Harness constraint remains:** Only ONE execute slot at a time, regardless of strategy.
+The internal wave parallelism happens WITHIN a session, not across slots.
+</guidelines>
 
 <orphan_prevention>
 **Session Lifecycle and Orphan Prevention**
