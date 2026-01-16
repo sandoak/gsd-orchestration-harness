@@ -7,6 +7,9 @@ export {
 // Recovery utilities
 export { recoverOrphanedSessions, type RecoveryResult } from './recovery.js';
 
+// Protocol directory for crash recovery
+export { ProtocolDirectory } from './protocol-directory.js';
+
 // Low-level session manager (for advanced use cases)
 export { SessionManager, type SessionManagerOptions } from './session-manager.js';
 
@@ -18,10 +21,13 @@ export {
   SessionStore,
   OutputStore,
   OrchestrationStore,
+  MessageStore,
   type SessionUpdateFields,
   type OrchestrationState,
   type PhasePlan,
   type PlanStatus,
+  type WorkerMessageCreateInput,
+  type OrchestratorMessageCreateInput,
 } from './db/index.js';
 
 // Re-export relevant types from @gsd/core

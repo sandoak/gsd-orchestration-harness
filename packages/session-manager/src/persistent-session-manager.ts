@@ -18,6 +18,7 @@ import { MessageStore } from './db/message-store.js';
 import { OrchestrationStore } from './db/orchestration-store.js';
 import { OutputStore } from './db/output-store.js';
 import { SessionStore } from './db/session-store.js';
+import { ProtocolDirectory } from './protocol-directory.js';
 import { recoverOrphanedSessions, type RecoveryResult } from './recovery.js';
 import { SessionManager, type SessionManagerOptions } from './session-manager.js';
 
@@ -88,6 +89,9 @@ export class PersistentSessionManager extends EventEmitter<PersistentSessionMana
   private sessionManager: SessionManager;
   private timeoutChecker: ReturnType<typeof setInterval> | null = null;
   private sessionTimeout: number;
+
+  // Protocol directories per working directory (for crash recovery)
+  private protocolDirs: Map<string, ProtocolDirectory> = new Map();
 
   constructor(options?: PersistentSessionManagerOptions) {
     super();
@@ -210,21 +214,57 @@ export class PersistentSessionManager extends EventEmitter<PersistentSessionMana
   /**
    * Spawns a new Claude CLI session.
    * The session is automatically persisted to the database.
+   * Also initializes the protocol directory for crash recovery.
    *
    * @param workingDir - Working directory for the Claude process
    * @param command - Optional command to pass to Claude
    * @returns The created session
    */
   async spawn(workingDir: string, command?: string): Promise<Session> {
-    return this.sessionManager.spawn(workingDir, command);
+    const session = await this.sessionManager.spawn(workingDir, command);
+
+    // Initialize protocol directory for this working directory
+    let protocolDir = this.protocolDirs.get(workingDir);
+    if (!protocolDir) {
+      protocolDir = new ProtocolDirectory(workingDir);
+      protocolDir.initialize();
+      this.protocolDirs.set(workingDir, protocolDir);
+    }
+
+    // Create session directory in protocol
+    protocolDir.createSessionDir(session.id);
+
+    // Write initial status
+    protocolDir.writeStatus(session.id, {
+      sessionId: session.id,
+      timestamp: new Date().toISOString(),
+      state: 'initializing',
+      phase: 0,
+      plan: 0,
+      currentTask: 0,
+      totalTasks: 0,
+    });
+
+    return session;
   }
 
   /**
    * Terminates a session by killing its process.
+   * Cleans up active file registrations in the protocol directory.
    *
    * @param sessionId - ID of the session to terminate
    */
   async terminate(sessionId: string): Promise<void> {
+    // Get session to find working dir
+    const session = this.sessionManager.getSession(sessionId);
+    if (session) {
+      // Clean up active file registrations
+      const protocolDir = this.protocolDirs.get(session.workingDir);
+      if (protocolDir) {
+        protocolDir.unregisterSessionFiles(sessionId);
+      }
+    }
+
     await this.sessionManager.terminate(sessionId);
   }
 
@@ -329,6 +369,23 @@ export class PersistentSessionManager extends EventEmitter<PersistentSessionMana
    */
   get messageStore(): MessageStore {
     return this._messageStore;
+  }
+
+  /**
+   * Gets or creates a protocol directory for a working directory.
+   * Used for crash recovery and state persistence.
+   *
+   * @param workingDir - The project working directory
+   * @returns The ProtocolDirectory instance
+   */
+  getProtocolDirectory(workingDir: string): ProtocolDirectory {
+    let protocolDir = this.protocolDirs.get(workingDir);
+    if (!protocolDir) {
+      protocolDir = new ProtocolDirectory(workingDir);
+      protocolDir.initialize();
+      this.protocolDirs.set(workingDir, protocolDir);
+    }
+    return protocolDir;
   }
 
   /**

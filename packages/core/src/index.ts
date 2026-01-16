@@ -7,6 +7,7 @@ export * from './types/checkpoint.js';
 export * from './types/events.js';
 export * from './types/worker-messages.js';
 export * from './types/orchestrator-messages.js';
+export * from './types/protocol.js';
 
 // Constants
 export * from './constants.js';

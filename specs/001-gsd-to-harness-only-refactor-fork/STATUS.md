@@ -24,8 +24,8 @@ From SPEC.md:
 | Phase | Goal                               | Status   | Commit  |
 | ----- | ---------------------------------- | -------- | ------- |
 | 0     | Fork GSD Skills → Harness Commands | Complete | d1aa4f8 |
-| 1     | Worker Message Protocol            | Complete | pending |
-| 2     | File-Based Protocol Directory      | Pending  |         |
+| 1     | Worker Message Protocol            | Complete | c88106b |
+| 2     | File-Based Protocol Directory      | Complete | pending |
 | 3     | Project State Documents            | Pending  |         |
 | 4     | Verification System                | Pending  |         |
 | 5     | Worker Instructions Template       | Pending  |         |
@@ -54,7 +54,7 @@ From SPEC.md:
 
 ## Phase 1 Complete
 
-**Commit:** pending
+**Commit:** c88106b
 **Date:** 2026-01-16
 
 **Goal:** Add explicit worker-to-orchestrator messaging via MCP tools
@@ -92,6 +92,62 @@ From SPEC.md:
 
 **Files created:** 6 new TypeScript files
 **Files modified:** 6 existing TypeScript files
+
+---
+
+## Phase 2 Complete
+
+**Commit:** pending
+**Date:** 2026-01-16
+
+**Goal:** Add `.orchestration/` protocol directory for crash recovery and state persistence
+
+**What was done:**
+
+### Protocol Types (`packages/core/src/types/protocol.ts`)
+
+- `WorkerStatus` - Worker state for status.json
+- `PersistedCheckpoint` - Checkpoint data for checkpoint.json
+- `PersistedCheckpointResponse` - Response data for checkpoint_response.json
+- `ExecutionResult` - Execution results for result.json
+- `PlanDependency` - Plan dependency information
+- `DependencyGraphState` - Current state of dependency graph
+- `ActiveFilesState` - Active file tracking for conflict detection
+- `OrchestrationConfig` - Orchestration settings
+
+### Protocol Directory Manager (`packages/session-manager/src/protocol-directory.ts`)
+
+- Manages `.orchestration/` directory structure
+- CRUD operations for all protocol files (status, checkpoint, result)
+- Dependency graph state management
+- Active file tracking for conflict detection
+- Recovery methods for crash recovery
+
+### Integration with PersistentSessionManager
+
+- Auto-initialize protocol directory on session spawn
+- Create session directories automatically
+- Write initial status on spawn
+- Clean up active files on terminate
+- `getProtocolDirectory()` method for access
+
+**Directory Structure:**
+
+```
+.orchestration/
+  config.yaml              # Orchestration settings
+  dependency-graph.json    # Current dependency graph state
+  active-files.json        # Files being modified (conflict detection)
+  sessions/
+    {session-id}/
+      status.json          # Current worker status
+      checkpoint.json      # Active checkpoint (if any)
+      checkpoint_response.json  # Orchestrator response
+      result.json          # Final execution result
+```
+
+**Files created:** 2 new TypeScript files
+**Files modified:** 3 existing TypeScript files
 
 ---
 
