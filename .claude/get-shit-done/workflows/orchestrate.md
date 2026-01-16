@@ -42,12 +42,18 @@ AFTER ALL PLANS IN PHASE COMPLETE:
 **When verification finds BLOCKING issues:**
 
 1. **STOP** - Do not proceed to next phase
-2. **FIX** - Run `/gsd:plan-fix` to create fix plan, then execute it
-3. **RE-VERIFY** - Run verification again after fix
-4. **ONLY THEN** proceed to next phase
+2. **DIAGNOSE** - If cause is unclear, run `/gsd:debug [issue]` to investigate
+3. **FIX** - Run `/gsd:plan-fix` to create fix plan, then execute it
+4. **RE-VERIFY** - Run verification again after fix
+5. **ONLY THEN** proceed to next phase
 
 **Blocking issues are BLOCKERS** - the name says it all. You cannot skip them.
 If Phase 3 has blocking issues, Phase 4 CANNOT proceed until Phase 3 is fixed.
+
+**When to use /gsd:debug vs /gsd:plan-fix:**
+
+- `/gsd:debug` - Root cause is unclear, need investigation first
+- `/gsd:plan-fix` - Root cause is known, need to plan and execute fix
 
 ### USE IDLE SLOTS FOR VERIFICATION (Don't Wait!)
 
@@ -1133,11 +1139,32 @@ Error: [summary]
 
 Options:
 1. Retry again - Start the task again
-2. Skip - Mark as failed, continue pipeline
-3. Investigate - Show full output and report issue
+2. Debug - Spawn /gsd:debug to investigate root cause
+3. Skip - Mark as failed, continue pipeline
+4. Investigate - Show full output and report issue
 ```
 
 5. Continue pipeline with other slots
+
+**When to use Debug option:**
+
+- Error is not obvious from output
+- Same error recurs despite retries
+- Verification finds blocking issues with unclear cause
+- Need systematic root cause analysis
+
+**Debug workflow:**
+
+```
+gsd_start_session(workingDir, "/gsd:debug [brief issue description]")
+```
+
+The gsd-debugger agent will:
+
+- Investigate using scientific method (hypothesis → test → refine)
+- Maintain debug state in `.planning/debug/` (survives context resets)
+- Return with ROOT CAUSE FOUND, CHECKPOINT (needs input), or INCONCLUSIVE
+- Optionally fix the issue if root cause is found
 
 **NEVER offer "execute directly in this session" as an option. The user chose /gsd:orchestrate specifically to use the harness.**
 </step>
