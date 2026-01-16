@@ -261,11 +261,16 @@ export class MessageStore {
 
   /**
    * Gets the latest pending message for a session that requires a response.
-   * These are: verification_needed, decision_needed, action_needed
+   * These are: verification_needed, decision_needed, action_needed, credentials_needed
    */
   getLatestPendingCheckpoint(sessionId: string): WorkerMessage | undefined {
     const pending = this.listPendingBySession(sessionId);
-    const checkpointTypes = ['verification_needed', 'decision_needed', 'action_needed'];
+    const checkpointTypes = [
+      'verification_needed',
+      'decision_needed',
+      'action_needed',
+      'credentials_needed',
+    ];
     return pending.find((msg) => checkpointTypes.includes(msg.type));
   }
 

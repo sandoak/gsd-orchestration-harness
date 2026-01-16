@@ -4,31 +4,75 @@ This document provides context for the harness orchestrator when managing worker
 
 ## Credential Access
 
-Server credentials and secrets are stored at:
+Use the `CredentialProvider` class to programmatically look up credentials:
+
+```typescript
+import { CredentialProvider, lookupCredentials } from '@gsd/session-manager';
+
+// When worker sends 'credentials_needed' message:
+const result = lookupCredentials(
+  message.payload.service, // e.g., 'postgres'
+  message.payload.envVars, // e.g., ['DATABASE_URL']
+  message.payload.context // e.g., 'production'
+);
+
+// Respond with credentials
+harness_respond({
+  type: 'credentials_provided',
+  sessionId: message.sessionId,
+  inResponseTo: message.id,
+  payload: {
+    phase: message.payload.phase,
+    plan: message.payload.plan,
+    service: message.payload.service,
+    credentials: result.credentials, // { "DATABASE_URL": "...", ... }
+    found: result.found,
+    error: result.error,
+    instructions: result.instructions,
+  },
+});
+```
+
+**Default credentials directory:**
 
 ```
 /mnt/dev-linux/projects/server-maintenance/docs/servers/
 ```
 
-When a worker requests credentials:
+Override via `HARNESS_CREDENTIALS_DIR` environment variable.
 
-1. Check the credentials directory for the relevant service
-2. Respond via `harness_respond` with the credentials
-3. Never include credentials in logs or public output
+### Known Services
 
-### Common Credential Patterns
+| Service    | Env Vars                                          |
+| ---------- | ------------------------------------------------- |
+| postgres   | DATABASE_URL, PGPASSWORD, PGUSER, PGHOST, etc.    |
+| redis      | REDIS_URL, REDIS_HOST, REDIS_PORT, REDIS_PASSWORD |
+| supabase   | SUPABASE_URL, SUPABASE_KEY, SUPABASE_SERVICE_KEY  |
+| stripe     | STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET          |
+| openai     | OPENAI_API_KEY, OPENAI_ORG_ID                     |
+| anthropic  | ANTHROPIC_API_KEY                                 |
+| aws        | AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY          |
+| github     | GITHUB_TOKEN, GH_TOKEN                            |
+| sendgrid   | SENDGRID_API_KEY                                  |
+| twilio     | TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN             |
+| vercel     | VERCEL_TOKEN                                      |
+| cloudflare | CLOUDFLARE_API_TOKEN                              |
 
-| Service    | Typical Location    | Env Vars                                 |
-| ---------- | ------------------- | ---------------------------------------- |
-| PostgreSQL | `servers/postgres/` | DATABASE_URL, PGPASSWORD                 |
-| Redis      | `servers/redis/`    | REDIS_URL                                |
-| Supabase   | `servers/supabase/` | SUPABASE_URL, SUPABASE_KEY               |
-| Stripe     | `servers/stripe/`   | STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET |
-| AWS        | `servers/aws/`      | AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY |
-| OpenAI     | `servers/openai/`   | OPENAI_API_KEY                           |
-| GitHub     | `servers/github/`   | GITHUB_TOKEN                             |
-| SendGrid   | `servers/sendgrid/` | SENDGRID_API_KEY                         |
-| Twilio     | `servers/twilio/`   | TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN    |
+### Credential File Format
+
+Files should use `.env` format:
+
+```
+DATABASE_URL=postgresql://user:pass@host:5432/db
+PGPASSWORD=secret
+```
+
+### Security
+
+- Never include credentials in logs
+- Credentials are not stored in the database
+- Worker receives credentials via structured message protocol
+- Set up per-environment files: `postgres-production.env`, `postgres-staging.env`
 
 ## Worker Management
 

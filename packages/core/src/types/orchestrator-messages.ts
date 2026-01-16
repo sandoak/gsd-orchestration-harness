@@ -13,6 +13,7 @@ export type OrchestratorMessageType =
   | 'verification_result' // Result of verification request
   | 'decision_made' // Decision made by user/orchestrator
   | 'action_completed' // Human action has been completed
+  | 'credentials_provided' // Credentials for requested service
   | 'abort_task'; // Abort current task
 
 /**
@@ -86,6 +87,22 @@ export interface ActionCompletedMessage extends OrchestratorMessageBase {
 }
 
 /**
+ * Orchestrator provides credentials for a requested service.
+ */
+export interface CredentialsProvidedMessage extends OrchestratorMessageBase {
+  type: 'credentials_provided';
+  payload: {
+    phase: number;
+    plan: number;
+    service: string;
+    credentials: Record<string, string>; // env var name -> value
+    found: boolean; // Whether credentials were found
+    error?: string; // Error message if not found
+    instructions?: string; // Setup instructions if credentials missing
+  };
+}
+
+/**
  * Orchestrator aborts a task.
  */
 export interface AbortTaskMessage extends OrchestratorMessageBase {
@@ -107,6 +124,7 @@ export type OrchestratorMessage =
   | VerificationResultMessage
   | DecisionMadeMessage
   | ActionCompletedMessage
+  | CredentialsProvidedMessage
   | AbortTaskMessage;
 
 /**
@@ -118,7 +136,12 @@ export type OrchestratorMessageInput = Omit<OrchestratorMessage, 'id' | 'timesta
  * Helper to check if a message type is a response to a worker request.
  */
 export function isResponseMessage(type: OrchestratorMessageType): boolean {
-  return ['verification_result', 'decision_made', 'action_completed'].includes(type);
+  return [
+    'verification_result',
+    'decision_made',
+    'action_completed',
+    'credentials_provided',
+  ].includes(type);
 }
 
 /**

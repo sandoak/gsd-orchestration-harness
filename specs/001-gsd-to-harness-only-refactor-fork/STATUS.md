@@ -28,8 +28,8 @@ From SPEC.md:
 | 2     | File-Based Protocol Directory      | Complete | ce5d87e |
 | 3     | Project State Documents            | Complete | 0b09560 |
 | 4     | Verification System                | Complete | 5b859e7 |
-| 5     | Worker Instructions Template       | Pending  |         |
-| 6     | Migration and Cleanup              | Pending  |         |
+| 5     | Worker Instructions Template       | Complete | a5e21f4 |
+| 6     | Migration and Cleanup              | Complete | (tbd)   |
 
 ## Phase 0 Complete
 

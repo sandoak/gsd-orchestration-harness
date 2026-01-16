@@ -156,25 +156,43 @@ harness_worker_report({
 
 ## Credential Access
 
-If you need credentials for external services:
-
-1. **Report the need:**
+If you need credentials for external services, use the `credentials_needed` message type:
 
 ```
 harness_worker_report({
-  type: "action_needed",
+  type: "credentials_needed",
   session_id: "{your-session-id}",
-  task_id: "{task-number}",
-  action: "Provide database credentials",
-  credentials_needed: ["DATABASE_URL", "DATABASE_PASSWORD"],
-  service: "postgres"
+  payload: {
+    phase: {phase},
+    plan: {plan},
+    service: "postgres",  // e.g., 'postgres', 'stripe', 'openai', 'aws'
+    envVars: ["DATABASE_URL", "PGPASSWORD"],  // specific vars needed
+    reason: "Need to connect to production database",
+    context: "production"  // optional: 'production', 'staging', etc.
+  }
 })
+
+// Wait for orchestrator to provide credentials
+harness_worker_await({ session_id: "{your-session-id}" })
+// Response will include: { credentials: { "DATABASE_URL": "...", ... }, found: true }
 ```
 
-2. The orchestrator has access to credentials at:
-   `/mnt/dev-linux/projects/server-maintenance/docs/servers/`
+**Known services with pre-configured env vars:**
 
-3. The orchestrator will respond with the credentials or instructions.
+| Service   | Default Env Vars                                  |
+| --------- | ------------------------------------------------- |
+| postgres  | DATABASE_URL, PGPASSWORD, PGUSER, PGHOST, etc.    |
+| redis     | REDIS_URL, REDIS_HOST, REDIS_PORT, REDIS_PASSWORD |
+| supabase  | SUPABASE_URL, SUPABASE_KEY                        |
+| stripe    | STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET          |
+| openai    | OPENAI_API_KEY                                    |
+| anthropic | ANTHROPIC_API_KEY                                 |
+| aws       | AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY          |
+| github    | GITHUB_TOKEN                                      |
+| sendgrid  | SENDGRID_API_KEY                                  |
+| twilio    | TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN             |
+
+The orchestrator looks up credentials programmatically from its credentials directory.
 
 ## Sub-Agents and Skills
 

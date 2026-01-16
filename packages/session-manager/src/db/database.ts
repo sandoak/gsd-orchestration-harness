@@ -37,7 +37,7 @@ CREATE TABLE IF NOT EXISTS worker_messages (
   message_type TEXT NOT NULL CHECK (message_type IN (
     'session_ready', 'task_started', 'progress_update',
     'verification_needed', 'decision_needed', 'action_needed',
-    'task_completed', 'task_failed'
+    'credentials_needed', 'task_completed', 'task_failed'
   )),
   payload TEXT NOT NULL,
   status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'responded', 'expired')),
@@ -56,7 +56,7 @@ CREATE TABLE IF NOT EXISTS orchestrator_messages (
   session_id TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
   message_type TEXT NOT NULL CHECK (message_type IN (
     'assign_task', 'verification_result', 'decision_made',
-    'action_completed', 'abort_task'
+    'action_completed', 'credentials_provided', 'abort_task'
   )),
   payload TEXT NOT NULL,
   in_response_to TEXT REFERENCES worker_messages(id),

@@ -19,6 +19,7 @@ const getPendingSchema = {
         'verification_needed',
         'decision_needed',
         'action_needed',
+        'credentials_needed',
         'task_completed',
         'task_failed',
       ])
@@ -55,7 +56,12 @@ export function registerGetPendingTool(server: McpServer, manager: PersistentSes
     }
 
     // Identify which messages require responses
-    const requiresResponse = ['verification_needed', 'decision_needed', 'action_needed'];
+    const requiresResponse = [
+      'verification_needed',
+      'decision_needed',
+      'action_needed',
+      'credentials_needed',
+    ];
 
     // Format the response
     const messages = pendingMessages.map((msg) => ({

@@ -15,6 +15,7 @@ export type WorkerMessageType =
   | 'verification_needed' // Worker needs verification of completed work
   | 'decision_needed' // Worker needs a decision from orchestrator
   | 'action_needed' // Worker needs human action (rare)
+  | 'credentials_needed' // Worker needs credentials for a service
   | 'task_completed' // Worker finished task successfully
   | 'task_failed'; // Worker failed to complete task
 
@@ -123,6 +124,22 @@ export interface ActionNeededMessage extends WorkerMessageBase {
 }
 
 /**
+ * Worker needs credentials for an external service.
+ * The orchestrator will look up credentials from the configured credentials directory.
+ */
+export interface CredentialsNeededMessage extends WorkerMessageBase {
+  type: 'credentials_needed';
+  payload: {
+    phase: number;
+    plan: number;
+    service: string; // e.g., 'postgres', 'stripe', 'openai'
+    envVars: string[]; // e.g., ['DATABASE_URL', 'PGPASSWORD']
+    reason: string; // Why credentials are needed
+    context?: string; // Additional context (e.g., which database)
+  };
+}
+
+/**
  * Worker completed task successfully.
  */
 export interface TaskCompletedMessage extends WorkerMessageBase {
@@ -164,6 +181,7 @@ export type WorkerMessage =
   | VerificationNeededMessage
   | DecisionNeededMessage
   | ActionNeededMessage
+  | CredentialsNeededMessage
   | TaskCompletedMessage
   | TaskFailedMessage;
 
@@ -176,5 +194,7 @@ export type WorkerMessageInput = Omit<WorkerMessage, 'id' | 'timestamp' | 'statu
  * Helper to check if a message requires a response.
  */
 export function messageRequiresResponse(type: WorkerMessageType): boolean {
-  return ['verification_needed', 'decision_needed', 'action_needed'].includes(type);
+  return ['verification_needed', 'decision_needed', 'action_needed', 'credentials_needed'].includes(
+    type
+  );
 }
