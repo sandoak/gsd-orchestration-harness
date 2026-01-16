@@ -26,7 +26,7 @@ From SPEC.md:
 | 0     | Fork GSD Skills → Harness Commands | Complete | d1aa4f8 |
 | 1     | Worker Message Protocol            | Complete | c88106b |
 | 2     | File-Based Protocol Directory      | Complete | ce5d87e |
-| 3     | Project State Documents            | Complete | (tbd)   |
+| 3     | Project State Documents            | Complete | 0b09560 |
 | 4     | Verification System                | Pending  |         |
 | 5     | Worker Instructions Template       | Pending  |         |
 | 6     | Migration and Cleanup              | Pending  |         |
@@ -153,7 +153,7 @@ From SPEC.md:
 
 ## Phase 3 Complete
 
-**Commit:** (tbd)
+**Commit:** 0b09560
 **Date:** 2026-01-16
 
 **Goal:** Consolidate STATE.md into ROADMAP.md with YAML frontmatter for quick state reading
