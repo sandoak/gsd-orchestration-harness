@@ -247,11 +247,13 @@ export class CheckpointParser {
 
   /**
    * Parse human-action checkpoint content.
+   * Supports both old format (CHECKPOINT: human-action) and new format (CHECKPOINT: Action Required)
    */
   private static parseHumanAction(rawContent: string, sessionId: string): HumanActionCheckpoint {
-    // Extract action required
+    // Extract action required - support both old and new formats
     const actionPatterns = [
-      /Action required[:\s]+([^\n]+)/i,
+      /Task[:\s]+([^\n]+)/i, // New format: "Task: Configure DNS..."
+      /Action required[:\s]+([^\n]+)/i, // Old format
       /Action[:\s]+([^\n]+)/i,
       /Need your help with[:\s]+([^\n]+)/i,
     ];
@@ -265,10 +267,10 @@ export class CheckpointParser {
       }
     }
 
-    // Extract instructions (multi-line content after "Instructions:")
+    // Extract instructions (multi-line content after "Instructions:" or "What you need to do:")
     const instructionsPatterns = [
-      /Instructions[:\s]*\n((?:[^\n]+\n?)+?)(?=Type|I'll verify|═|$)/i,
-      /What you need to do[:\s]*\n((?:[^\n]+\n?)+?)(?=Type|I'll verify|═|$)/i,
+      /What you need to do[:\s]*\n((?:[^\n]+\n?)+?)(?=I'll verify|YOUR ACTION|─{3,}|═|$)/i, // New format
+      /Instructions[:\s]*\n((?:[^\n]+\n?)+?)(?=Type|I'll verify|═|$)/i, // Old format
     ];
 
     let instructions = rawContent;
@@ -280,10 +282,11 @@ export class CheckpointParser {
       }
     }
 
-    // Extract resume signal
+    // Extract resume signal - support both old and new formats
     const resumePatterns = [
-      /(Type\s*["']?done["']?[^═\n]*)/i,
-      /(Type\s*["']?[^"'\n]+["']?\s*when\s*[^═\n]*)/i,
+      /YOUR ACTION[:\s]+([^\n─]+)/i, // New format: "→ YOUR ACTION: Type "done" when..."
+      /(Type\s*["']?done["']?[^═\n─]*)/i, // General "done" pattern
+      /(Type\s*["']?[^"'\n]+["']?\s*when\s*[^═\n─]*)/i, // "Type X when Y" pattern
     ];
 
     let resumeSignal = 'Type "done" when complete';

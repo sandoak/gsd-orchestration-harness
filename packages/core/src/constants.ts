@@ -4,5 +4,6 @@ export const DEFAULT_OUTPUT_BUFFER_SIZE = 50000; // ~50KB
 export const CHECKPOINT_PATTERNS = {
   humanVerify: /CHECKPOINT:\s*human-verify/i,
   decision: /CHECKPOINT:\s*decision/i,
-  humanAction: /CHECKPOINT:\s*human-action/i,
+  // Match both old "human-action" and new "Action Required" formats
+  humanAction: /CHECKPOINT:\s*(?:human-action|Action\s*Required)/i,
 } as const;
