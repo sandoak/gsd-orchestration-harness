@@ -27,7 +27,7 @@ From SPEC.md:
 | 1     | Worker Message Protocol            | Complete | c88106b |
 | 2     | File-Based Protocol Directory      | Complete | ce5d87e |
 | 3     | Project State Documents            | Complete | 0b09560 |
-| 4     | Verification System                | Pending  |         |
+| 4     | Verification System                | Complete | 5b859e7 |
 | 5     | Worker Instructions Template       | Pending  |         |
 | 6     | Migration and Cleanup              | Pending  |         |
 
@@ -223,6 +223,54 @@ velocity:
 
 **Files created:** 2 new TypeScript files
 **Files modified:** 3 existing TypeScript files
+
+---
+
+## Phase 4 Complete
+
+**Commit:** 5b859e7
+**Date:** 2026-01-16
+
+**Goal:** Add structured verification system with typed specs and execution engine
+
+**What was done:**
+
+### Verification Types (`packages/core/src/types/verification.ts`)
+
+- `VerificationType` union - All verification types:
+  - **Auto:** file_exists, file_contains, command_succeeds, api_response, tests_pass, build_succeeds, type_check, lint_clean, json_valid, env_var_set, port_available, process_running
+  - **Playwright:** ui_element_exists, ui_element_text, ui_navigation, ui_form_submit, ui_screenshot_match, ui_no_console_errors, ui_accessibility
+  - **Human:** visual_quality, ux_flow, content_review, security_review
+- Typed interfaces for each verification spec type
+- `VerificationResult` - Result of running a verification
+- `PlanVerificationManifest` - Manifest from PLAN.md frontmatter (must_pass, should_pass)
+- `VerificationReport` - Complete report for plan or phase
+- Helper functions: `getVerificationCategory()`, `requiresPlaywright()`, `requiresHuman()`, `filterByCategory()`, `getDefaultTimeout()`
+
+### Verification Engine (`packages/session-manager/src/verification-engine.ts`)
+
+- `VerificationEngine` class - Runs verification specs and produces reports
+- `verify(manifest)` - Run all verifications in a manifest
+- Auto verification implementations for all auto types
+- Playwright and human verification callbacks (provided by orchestrator)
+- `parseVerificationManifest()` - Parse manifest from PLAN.md frontmatter
+
+### Updated harness-planner Agent
+
+- Added `must_pass`, `should_pass`, `api_base_url`, `ui_base_url` frontmatter fields
+- Added verification manifest documentation with examples
+- Added verification types table by category
+
+**Verification Categories:**
+
+| Category   | When to Use                   | Execution                        |
+| ---------- | ----------------------------- | -------------------------------- |
+| Auto       | Fully automatable checks      | Runs immediately via Node.js     |
+| Playwright | Browser-based UI verification | Runs via Playwright MCP/API      |
+| Human      | Requires human judgment       | Queues for user via orchestrator |
+
+**Files created:** 2 new TypeScript files
+**Files modified:** 2 existing files
 
 ---
 
