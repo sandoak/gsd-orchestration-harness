@@ -1,5 +1,5 @@
-import { describe, it, expect } from 'vitest';
 import { v4 as uuidv4 } from 'uuid';
+import { describe, it, expect } from 'vitest';
 
 import { db } from '../src/db/connection.js';
 
@@ -13,7 +13,12 @@ interface TaskRow {
 }
 
 function createTestTask(
-  overrides: Partial<{ id: string; title: string; description: string | null; completed: number }> = {}
+  overrides: Partial<{
+    id: string;
+    title: string;
+    description: string | null;
+    completed: number;
+  }> = {}
 ): TaskRow {
   const id = overrides.id || uuidv4();
   const now = new Date().toISOString();
@@ -24,10 +29,12 @@ function createTestTask(
     completed: overrides.completed ?? 0,
   };
 
-  db.prepare(`
+  db.prepare(
+    `
     INSERT INTO tasks (id, title, description, completed, created_at, updated_at)
     VALUES (?, ?, ?, ?, ?, ?)
-  `).run(task.id, task.title, task.description, task.completed, now, now);
+  `
+  ).run(task.id, task.title, task.description, task.completed, now, now);
 
   return { ...task, created_at: now, updated_at: now };
 }
@@ -38,10 +45,12 @@ describe('Tasks Database Operations', () => {
       const id = uuidv4();
       const now = new Date().toISOString();
 
-      db.prepare(`
+      db.prepare(
+        `
         INSERT INTO tasks (id, title, description, completed, created_at, updated_at)
         VALUES (?, ?, ?, 0, ?, ?)
-      `).run(id, 'New Task', 'Description', now, now);
+      `
+      ).run(id, 'New Task', 'Description', now, now);
 
       const task = db.prepare('SELECT * FROM tasks WHERE id = ?').get(id) as TaskRow | undefined;
       expect(task).toBeDefined();
@@ -54,10 +63,12 @@ describe('Tasks Database Operations', () => {
       const id = uuidv4();
       const now = new Date().toISOString();
 
-      db.prepare(`
+      db.prepare(
+        `
         INSERT INTO tasks (id, title, description, completed, created_at, updated_at)
         VALUES (?, ?, ?, 0, ?, ?)
-      `).run(id, 'Task without description', null, now, now);
+      `
+      ).run(id, 'Task without description', null, now, now);
 
       const task = db.prepare('SELECT * FROM tasks WHERE id = ?').get(id) as TaskRow | undefined;
       expect(task).toBeDefined();
@@ -77,13 +88,17 @@ describe('Tasks Database Operations', () => {
     it('should fetch a single task by id', () => {
       const created = createTestTask({ title: 'Specific Task' });
 
-      const task = db.prepare('SELECT * FROM tasks WHERE id = ?').get(created.id) as TaskRow | undefined;
+      const task = db.prepare('SELECT * FROM tasks WHERE id = ?').get(created.id) as
+        | TaskRow
+        | undefined;
       expect(task).toBeDefined();
       expect(task?.title).toBe('Specific Task');
     });
 
     it('should return undefined for non-existent task', () => {
-      const task = db.prepare('SELECT * FROM tasks WHERE id = ?').get('non-existent') as TaskRow | undefined;
+      const task = db.prepare('SELECT * FROM tasks WHERE id = ?').get('non-existent') as
+        | TaskRow
+        | undefined;
       expect(task).toBeUndefined();
     });
 
@@ -103,16 +118,23 @@ describe('Tasks Database Operations', () => {
 
       db.prepare('UPDATE tasks SET title = ? WHERE id = ?').run('Updated', created.id);
 
-      const task = db.prepare('SELECT * FROM tasks WHERE id = ?').get(created.id) as TaskRow | undefined;
+      const task = db.prepare('SELECT * FROM tasks WHERE id = ?').get(created.id) as
+        | TaskRow
+        | undefined;
       expect(task?.title).toBe('Updated');
     });
 
     it('should update task description', () => {
       const created = createTestTask({ description: null });
 
-      db.prepare('UPDATE tasks SET description = ? WHERE id = ?').run('New description', created.id);
+      db.prepare('UPDATE tasks SET description = ? WHERE id = ?').run(
+        'New description',
+        created.id
+      );
 
-      const task = db.prepare('SELECT * FROM tasks WHERE id = ?').get(created.id) as TaskRow | undefined;
+      const task = db.prepare('SELECT * FROM tasks WHERE id = ?').get(created.id) as
+        | TaskRow
+        | undefined;
       expect(task?.description).toBe('New description');
     });
 
@@ -121,7 +143,9 @@ describe('Tasks Database Operations', () => {
 
       db.prepare('UPDATE tasks SET completed = 1 WHERE id = ?').run(created.id);
 
-      const task = db.prepare('SELECT * FROM tasks WHERE id = ?').get(created.id) as TaskRow | undefined;
+      const task = db.prepare('SELECT * FROM tasks WHERE id = ?').get(created.id) as
+        | TaskRow
+        | undefined;
       expect(task?.completed).toBe(1);
     });
 
@@ -136,7 +160,9 @@ describe('Tasks Database Operations', () => {
         created.id
       );
 
-      const task = db.prepare('SELECT * FROM tasks WHERE id = ?').get(created.id) as TaskRow | undefined;
+      const task = db.prepare('SELECT * FROM tasks WHERE id = ?').get(created.id) as
+        | TaskRow
+        | undefined;
       expect(task?.title).toBe('New');
       expect(task?.completed).toBe(1);
     });
@@ -149,7 +175,9 @@ describe('Tasks Database Operations', () => {
       const result = db.prepare('DELETE FROM tasks WHERE id = ?').run(created.id);
       expect(result.changes).toBe(1);
 
-      const task = db.prepare('SELECT * FROM tasks WHERE id = ?').get(created.id) as TaskRow | undefined;
+      const task = db.prepare('SELECT * FROM tasks WHERE id = ?').get(created.id) as
+        | TaskRow
+        | undefined;
       expect(task).toBeUndefined();
     });
 
@@ -176,10 +204,12 @@ describe('Tasks Database Operations', () => {
       const now = new Date().toISOString();
 
       expect(() => {
-        db.prepare(`
+        db.prepare(
+          `
           INSERT INTO tasks (id, title, description, completed, created_at, updated_at)
           VALUES (?, ?, ?, 0, ?, ?)
-        `).run(id, null, null, now, now);
+        `
+        ).run(id, null, null, now, now);
       }).toThrow();
     });
 
@@ -189,10 +219,12 @@ describe('Tasks Database Operations', () => {
       const id = uuidv4();
       const now = new Date().toISOString();
 
-      db.prepare(`
+      db.prepare(
+        `
         INSERT INTO tasks (id, title, description, completed, created_at, updated_at)
         VALUES (?, ?, ?, 0, ?, ?)
-      `).run(id, 'Title', null, now, now);
+      `
+      ).run(id, 'Title', null, now, now);
 
       const task = db.prepare('SELECT * FROM tasks WHERE id = ?').get(id) as TaskRow | undefined;
       expect(task).toBeDefined();
@@ -203,16 +235,20 @@ describe('Tasks Database Operations', () => {
       const id = uuidv4();
       const now = new Date().toISOString();
 
-      db.prepare(`
+      db.prepare(
+        `
         INSERT INTO tasks (id, title, description, completed, created_at, updated_at)
         VALUES (?, ?, ?, 0, ?, ?)
-      `).run(id, 'First', null, now, now);
+      `
+      ).run(id, 'First', null, now, now);
 
       expect(() => {
-        db.prepare(`
+        db.prepare(
+          `
           INSERT INTO tasks (id, title, description, completed, created_at, updated_at)
           VALUES (?, ?, ?, 0, ?, ?)
-        `).run(id, 'Second', null, now, now);
+        `
+        ).run(id, 'Second', null, now, now);
       }).toThrow();
     });
 
@@ -220,10 +256,12 @@ describe('Tasks Database Operations', () => {
       const id = uuidv4();
       const now = new Date().toISOString();
 
-      db.prepare(`
+      db.prepare(
+        `
         INSERT INTO tasks (id, title, created_at, updated_at)
         VALUES (?, ?, ?, ?)
-      `).run(id, 'Task', now, now);
+      `
+      ).run(id, 'Task', now, now);
 
       const task = db.prepare('SELECT * FROM tasks WHERE id = ?').get(id) as TaskRow | undefined;
       expect(task?.completed).toBe(0);
