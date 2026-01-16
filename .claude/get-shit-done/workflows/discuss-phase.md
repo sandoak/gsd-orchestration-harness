@@ -124,15 +124,7 @@ Use AskUserQuestion:
 - question: "What's the most important part of this phase?"
 - options: Key aspects they've mentioned + "All equally important" + "Something else"
 
-**4. Find boundaries:**
-
-Use AskUserQuestion:
-
-- header: "Scope"
-- question: "What's explicitly out of scope for this phase?"
-- options: Things that might be tempting + "Nothing specific" + "Let me list them"
-
-**5. Capture specifics (optional):**
+**4. Capture specifics (optional):**
 
 If they seem to have specific ideas, use AskUserQuestion:
 
@@ -146,8 +138,9 @@ CRITICAL — What NOT to ask:
 - Codebase patterns (you read the code)
 - Success metrics (too corporate)
 - Constraints they didn't mention (don't interrogate)
+- What's out of scope (implicit from roadmap)
 
-**6. Decision gate:**
+**5. Decision gate:**
 
 Use AskUserQuestion:
 
@@ -179,7 +172,6 @@ Populate template sections with VISION context (not technical analysis):
 
 - `<vision>`: How the user imagines this working
 - `<essential>`: What must be nailed in this phase
-- `<boundaries>`: What's explicitly out of scope
 - `<specifics>`: Any particular look/feel/behavior mentioned
 - `<notes>`: Any other context gathered
 
@@ -199,9 +191,6 @@ Created: .planning/phases/${PHASE}-${SLUG}/${PHASE}-CONTEXT.md
 
 ## Essential
 [What must be nailed]
-
-## Boundaries
-[What's out of scope]
 
 ---
 
@@ -249,7 +238,7 @@ Confirm: "Committed: docs(${PHASE}): capture phase context"
 
 - Phase validated against roadmap
 - Vision gathered through collaborative thinking (not interrogation)
-- User's imagination captured: how it works, what's essential, what's out of scope
+- User's imagination captured: how it works, what's essential
 - CONTEXT.md created in phase directory
 - CONTEXT.md committed to git
 - User knows next steps (typically: research or plan the phase)

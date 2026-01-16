@@ -343,12 +343,6 @@ Review and update Accumulated Context section in STATE.md.
 - If still relevant for future: Keep with "Phase X" prefix
 - Add any new concerns from completed phase's summaries
 
-**Deferred Issues:**
-
-- Count open issues in ISSUES.md
-- Update count: "[N] open issues — see ISSUES.md"
-- If many accumulated, note: "Consider addressing ISS-XXX, ISS-YYY in next phase"
-
 **Example:**
 
 Before:
@@ -358,10 +352,6 @@ Before:
 
 - ⚠️ [Phase 1] Database schema not indexed for common queries
 - ⚠️ [Phase 2] WebSocket reconnection behavior on flaky networks unknown
-
-### Deferred Issues
-
-- ISS-001: Rate limiting on sync endpoint (Phase 2) — Medium
 ```
 
 After (if database indexing was addressed in Phase 2):
@@ -370,11 +360,6 @@ After (if database indexing was addressed in Phase 2):
 ### Blockers/Concerns
 
 - ⚠️ [Phase 2] WebSocket reconnection behavior on flaky networks unknown
-
-### Deferred Issues
-
-- ISS-001: Rate limiting on sync endpoint (Phase 2) — Medium
-- ISS-002: Better sync error messages (Phase 2) — Quick
 ```
 
 **Step complete when:**
@@ -383,7 +368,6 @@ After (if database indexing was addressed in Phase 2):
 - [ ] Resolved blockers removed from list
 - [ ] Unresolved blockers kept with phase prefix
 - [ ] New concerns from completed phase added
-- [ ] Deferred issues count updated
 
 </step>
 

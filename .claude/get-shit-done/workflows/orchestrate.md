@@ -227,10 +227,12 @@ The harness provides 4 parallel session slots (Slot 1-4). Any slot can run any t
 **Task Types (by priority):**
 
 1. **Verify** - `/gsd:verify-work` - Quality gate, must pass before next phase
-2. **Reconcile** - Review next plan against last execution's reality
-3. **Execute** - `/gsd:execute-plan [path]` - Build the code
+2. **Execute** - `/gsd:execute-phase N` - Build all plans with wave parallelism
+3. **Research** - `/gsd:research-phase N` - Prepare future phases (runs ahead!)
 4. **Plan** - `/gsd:plan-phase X` - Create PLAN.md files
 5. **Admin** - Tests, builds, misc utility tasks
+
+Note: Reconcile removed - handled internally by execute-phase.
 
 Claude becomes the session coordinator—monitoring when sessions reach user prompts/hooks, responding to checkpoints, and keeping all slots productively busy.
 
@@ -253,9 +255,9 @@ Claude becomes the session coordinator—monitoring when sessions reach user pro
 │                                                                                    │
 │  TASK PRIORITY (orchestrator assigns highest priority to free slots):            │
 │    1. VERIFY      - Quality gate, blocks next phase                              │
-│    2. RECONCILE   - Validate next plan against reality                           │
-│    3. EXECUTE     - Build the code                                               │
-│    4. PLAN        - Create PLAN.md files                                         │
+│    2. EXECUTE     - Build the code (wave parallelism internal)                   │
+│    3. RESEARCH    - Prepare future phases (runs ahead of execution!)             │
+│    4. PLAN        - Create PLAN.md files (only after research)                   │
 │    5. ADMIN       - Tests, builds, utilities                                     │
 │                                                                                    │
 └──────────────────────────────────────────────────────────────────────────────────┘
@@ -299,13 +301,15 @@ You are the ORCHESTRATOR, not the EXECUTOR. Your ONLY job is to:
 **TASK PRIORITY (assign highest priority task to any free slot):**
 
 1. **VERIFY** - Must run after phase execution completes, blocks next phase
-2. **RECONCILE** - Must run after each execution, before next execution
-3. **EXECUTE** - Run planned work
-4. **PLAN** - Create plans (only if verify gate allows)
+2. **EXECUTE** - Run all plans in phase (wave parallelism internal)
+3. **RESEARCH** - Prepare future phases (can run ahead of execution!)
+4. **PLAN** - Create plans (only after research completes)
 5. **ADMIN** - Tests, builds, utilities
 
 **Why priority matters:** This prevents racing ahead without verification. The flow is:
-Execute → Reconcile next plan → Execute → ... → Verify phase → Unlock next phase
+Execute Phase N (with internal verification) → Verify Phase N → Research Phase N+1 → Plan Phase N+1 → Execute Phase N+1
+
+Note: Reconcile removed - execute-phase handles reconciliation internally between waves.
 
 You must NEVER:
 
@@ -383,98 +387,116 @@ What matters is: Are slots available? Start fresh sessions regardless of failure
 ...
 ```
 
-**Research Queue (check if needed before planning):**
+**Research Queue (DEFAULT: Research ALL upcoming phases):**
 
 ```
-[0] /gsd:research-phase 2  (if research recommended for phase)
+[0] /gsd:research-phase N+1  (next phase after current execution)
+[1] /gsd:research-phase N+2  (future phase)
+[2] /gsd:research-phase N+3  (future phase)
 ```
 
-**⚠️ RESEARCH DECISION - EVALUATE BEFORE EACH PHASE PLANNING:**
+**⚠️ AGGRESSIVE RESEARCH STRATEGY (v1.5.17 Best Practice):**
 
-Before adding a phase to the planning queue, explicitly evaluate:
+> "Measure twice, cut once... research is super helpful." - GSD Creator
 
-```
-RESEARCH CHECKLIST for Phase X:
-□ Is this phase technically complex? (new frameworks, unfamiliar APIs, integration points)
-□ Does ROADMAP.md mention unknowns or "needs investigation"?
-□ Will this phase touch external services or third-party systems?
-□ Is this the first time this type of work is being done in this project?
-□ Does the phase depend on decisions not yet made?
+**DEFAULT: Research EVERY phase** - unless explicitly trivial.
 
-IF ANY BOX CHECKED → Add to research queue FIRST: /gsd:research-phase X
-IF ALL BOXES UNCHECKED → Add directly to planning queue: /gsd:plan-phase X
-```
+**Research Queue Rules:**
 
-**Document your decision:**
+1. While executing Phase N, research Phase N+1, N+2, N+3 in parallel
+2. Research has NO dependencies on execution - safe to run ahead
+3. Only ONE planning session after research completes
+
+**Only SKIP research if ALL conditions met:**
 
 ```
-Phase 3 (@sandoak/utils): No research needed - standard utility functions, patterns established
-Phase 6 (@sandoak/ui): RESEARCH FIRST - new component library, need to evaluate shadcn patterns
-Phase 7 (@sandoak/email): RESEARCH FIRST - external service integration (Resend/SendGrid)
+□ Phase is pure configuration changes (env vars, settings)
+□ Phase is documentation only (no code changes)
+□ Phase explicitly marked "skip-research" in ROADMAP.md
+□ Phase already has *-RESEARCH.md file in .planning/
 ```
 
-This prevents rushing into planning phases that have unknowns that could derail execution.
-
-**Execution Queue (Wave-Aware):**
-
-Plans include wave metadata in frontmatter. Build queue ordered by wave:
-
-```bash
-# Extract wave number from plan frontmatter
-grep "^wave:" "$PLAN_PATH" | cut -d: -f2 | tr -d ' '
-```
+**Document your research decisions:**
 
 ```
-Wave 1 (independent - execute in order):
-[0] /gsd:execute-plan .planning/phases/01-xxx/01-01-PLAN.md  (wave: 1)
-[1] /gsd:execute-plan .planning/phases/01-xxx/01-02-PLAN.md  (wave: 1)
+Phase 3 (@sandoak/utils): RESEARCH - not trivial, could have patterns to discover
+Phase 4 (@sandoak/ui): RESEARCH - new component library, need to evaluate patterns
+Phase 5 (@sandoak/email): RESEARCH - external service integration (Resend/SendGrid)
+Phase 9 (config): SKIP RESEARCH - pure env config, trivially simple
+```
 
-Wave 2 (depends on Wave 1):
-[2] /gsd:execute-plan .planning/phases/01-xxx/01-03-PLAN.md  (wave: 2)
+**Why aggressive research:**
+
+- Research is cheap (runs in parallel, doesn't block execution)
+- Planning without research often produces suboptimal plans
+- Parallel research utilizes idle slots effectively
+
+**Execution Queue (Phase-Based):**
+
+With execute-phase, the orchestrator runs WHOLE PHASES, not individual plans:
+
+```
+[0] /gsd:execute-phase 1  (Phase 1 - all plans run with wave parallelism)
+[1] /gsd:execute-phase 2  (Phase 2 - waits for Phase 1 verify)
+[2] /gsd:execute-phase 3  (Phase 3 - waits for Phase 2 verify)
 ...
 ```
 
-**Wave ordering matters:** Execute all Wave 1 plans before Wave 2 plans.
-Plans in the same wave are independent and could theoretically run in parallel,
-but we execute them sequentially for plan-level verification granularity.
+**execute-phase handles internally:**
 
-**Verification Queue (TWO LEVELS):**
+- Wave-based parallelism (Wave 1 plans run in parallel, then Wave 2, etc.)
+- Plan-level verification after each plan
+- Reconciliation between plans (validates next plan against what was built)
+- Creates SUMMARY.md files for each plan
+
+**What orchestrator sees:**
+
+- Session starts: `/gsd:execute-phase N`
+- Session runs (may take a while with many plans)
+- Session completes: All plans executed with internal verification
+- Orchestrator runs: `/gsd:verify-work phase-N` for final phase-level verification
+
+**Verification Queue (PHASE-LEVEL ONLY with execute-phase):**
 
 ```
-PLAN-LEVEL (after each plan execution):
-[0] /gsd:verify-work 03-01  (after 03-01 executes)
-[1] /gsd:verify-work 03-02  (after 03-02 executes)
+PHASE-LEVEL (orchestrator runs after execute-phase completes):
+[0] /gsd:verify-work phase-1  (after execute-phase 1 completes)
+[1] /gsd:verify-work phase-2  (after execute-phase 2 completes)
+[2] /gsd:verify-work phase-3  (after execute-phase 3 completes)
 ...
-
-PHASE-LEVEL (after ALL plans in phase complete):
-[0] /gsd:verify-work phase-3  (after 03-01, 03-02, 03-03, 03-04 all done)
 ```
 
-**⚠️ STARTUP RECONCILIATION QUEUE (check at orchestration start):**
+Note: Plan-level verification happens INTERNALLY in execute-phase.
+The orchestrator only needs to run phase-level verification.
 
-At startup, scan for plans that need reconciliation:
+**⚠️ STARTUP STATE CHECK (at orchestration start):**
+
+At startup, determine which phases need work:
 
 ```
-For each pending PLAN.md (no SUMMARY.md):
-  - Find the previous plan in sequence (e.g., 05-01 before 05-02)
-  - If previous plan has SUMMARY.md → this plan needs reconcile
-  - Add to reconcile queue: "Review 05-02-PLAN.md against 05-01-SUMMARY.md"
+For each phase:
+  - Has PLAN.md files? → Ready for execution
+  - Has SUMMARY.md files for ALL plans? → Execution complete, needs phase verify
+  - Has VERIFICATION.md? → Phase complete, move to next
 ```
 
 Example at startup:
 
 ```
-05-01-PLAN.md → 05-01-SUMMARY.md exists ✓ (executed)
-05-02-PLAN.md → no SUMMARY (pending) → NEEDS RECONCILE against 05-01-SUMMARY.md
-05-03-PLAN.md → no SUMMARY (pending) → will need reconcile after 05-02 executes
+Phase 3: All plans have SUMMARY.md ✓ → Run /gsd:verify-work phase-3
+Phase 4: Has PLAN.md files, no SUMMARY.md → Run /gsd:execute-phase 4
+Phase 5: No PLAN.md files → Run /gsd:research-phase 5, then /gsd:plan-phase 5
 ```
+
+Note: Reconciliation is handled INTERNALLY by execute-phase (between plans).
+The orchestrator does NOT need to reconcile - just start execute-phase.
 
 **Queue Dependencies:**
 
-- Research runs before planning (if recommended)
-- Execution waits for planning to create PLAN.md
-- Reconcile runs before execution (if previous SUMMARY exists)
-- Verification waits for execution to create SUMMARY.md
+- Research runs before planning (DEFAULT: research all phases)
+- Planning waits for research to complete
+- Execution waits for planning to create PLAN.md files
+- Phase verification waits for execute-phase to complete
 
 **Dynamic Queue Updates:**
 
@@ -660,73 +682,57 @@ One tool call replaces dozens of polling calls. Much more efficient!
 
    Only ONE verify at a time
 
-   **PRIORITY 2: RECONCILE (use 1 slot when execution completes)**
-
-   **⚠️ CRITICAL: After EVERY execution completes, reconcile the next plan!**
-
-   When an execute session completes:
-   1. Note which SUMMARY.md was just created (e.g., `05-01-SUMMARY.md`)
-   2. Find the next pending PLAN.md (e.g., `05-02-PLAN.md`)
-   3. Start a reconcile session in an open slot:
-
-   ```
-   gsd_start_session(workingDir, "Review .planning/phases/05-xxx/05-02-PLAN.md against the just-completed 05-01-SUMMARY.md. Check if any APIs, file paths, component names, or patterns in the plan need updating based on what was actually built. Make minimal targeted updates only - don't rewrite the plan.")
-   ```
-
-   **Reconcile runs in parallel** - while one slot reconciles, other slots can verify or wait.
-
-   Track reconciliation state:
-
-   ```
-   orchestrator_state.pending_reconcile = {
-     next_plan: "05-02-PLAN.md",
-     last_summary: "05-01-SUMMARY.md"
-   } | null
-   ```
-
-   Clear `pending_reconcile` when reconcile session completes.
-
-   **PRIORITY 3: EXECUTE**
-   If execution queue has work AND plan's phase ≤ maxExecutePhase:
-   - `gsd_start_session(workingDir, "/gsd:execute-plan [path]")`
-   - **Execute CAN and SHOULD run in parallel with verify!**
+   **PRIORITY 2: EXECUTE (uses execute-phase)**
+   If execution queue has work AND phase ≤ maxExecutePhase:
+   - `gsd_start_session(workingDir, "/gsd:execute-phase N")`
+   - **Execute CAN and SHOULD run in parallel with research!**
    - Check `limits.maxExecutePhase` from sync - if phase ≤ maxExecutePhase, START IT
    - Only ONE execute at a time (harness enforces this)
-   - **Respect wave order:** Execute Wave 1 plans before Wave 2 (check `wave:` in frontmatter)
 
-   **PRIORITY 4: PLAN (with RESEARCH DECISION)**
+   **What execute-phase does internally:**
+   - Runs all plans in the phase with wave-based parallelism
+   - Handles plan-level verification after each plan
+   - Handles reconciliation between plans automatically
+   - Creates SUMMARY.md files for each plan
+
+   **Orchestrator just starts it and waits for completion.**
+
+   **PRIORITY 3: RESEARCH (runs ahead!)**
+   If research queue has work:
+   - `gsd_start_session(workingDir, "/gsd:research-phase N")`
+   - **Research can run in MULTIPLE slots simultaneously!**
+   - Research has NO dependencies on current execution
+   - Start research for N+1, N+2, N+3 while executing N
+
+   **Optimal slot usage during execution:**
+
+   ```
+   Slot 1: execute-phase N        # Building current phase
+   Slot 2: research-phase N+1     # Preparing next phase
+   Slot 3: research-phase N+2     # Preparing future phase
+   Slot 4: idle or admin          # Ready for verify when execute completes
+   ```
+
+   **PRIORITY 4: PLAN (only after research)**
    If planning queue has work:
    - **CHECK VERIFY GATE:** Is previous phase verified?
    - If NOT verified: DO NOT START PLANNING - wait for verify
+   - **CHECK RESEARCH:** Has research completed for this phase?
+   - If research not done: DO NOT PLAN - start research first
 
-   **⚠️ BEFORE PLANNING - EVALUATE RESEARCH NEED:**
+   **Planning workflow:**
+   1. Research completes → Phase added to planning queue
+   2. `gsd_start_session(workingDir, "/gsd:plan-phase X")`
+   3. Only ONE planning session at a time
 
-   ```
-   For Phase X, check:
-   □ Technically complex? (new frameworks, unfamiliar APIs)
-   □ External services? (email, payments, auth providers)
-   □ Unknowns in ROADMAP.md?
-   □ First time doing this type of work?
+   **NOTE:** Research should already be running ahead (Priority 3).
+   By the time you need to plan Phase N+1, research should already be done.
+   If research hasn't started, something went wrong - start it now.
 
-   ANY CHECKED → /gsd:research-phase X FIRST
-   ALL UNCHECKED → /gsd:plan-phase X directly
-   ```
-
-   **If research needed:**
-   1. `gsd_start_session(workingDir, "/gsd:research-phase X")`
-   2. Wait for research to complete
-   3. Then `gsd_start_session(workingDir, "/gsd:plan-phase X")`
-
-   **If no research needed:**
-   - `gsd_start_session(workingDir, "/gsd:plan-phase X")`
-
-   Track research state:
+   Track research completion:
 
    ```
-   orchestrator_state.pending_research = {
-     phase: 5,
-     reason: "External email service integration"
-   } | null
+   orchestrator_state.researched_phases = Set<number>  // Phases that have research completed
    ```
 
    **PRIORITY 5: ADMIN (lowest)**
@@ -735,10 +741,15 @@ One tool call replaces dozens of polling calls. Much more efficient!
 
    **WHY THIS ORDER:**
    - Verify first ensures quality gates are enforced
-   - Reconcile second keeps plans aligned with reality
-   - Execute third builds the code
-   - Plan fourth (with research if needed) respects verify gates
+   - Execute second builds the code (handles reconcile internally)
+   - Research third prepares future phases (runs ahead!)
+   - Plan fourth only after research completes
    - Admin fills remaining time
+
+   **KEY INSIGHT:** Research is now higher priority than planning because:
+   - Research can run in parallel (multiple slots)
+   - Research has no dependencies on current execution
+   - Research ahead means planning never waits
 
 2. **Wait for state changes (EFFICIENT!):**
 
@@ -788,12 +799,14 @@ One tool call replaces dozens of polling calls. Much more efficient!
 
    **THEN handle by type:**
    - **Plan session completes**: Refresh execution queue (new PLAN.md files available)
-   - **Execute session completes**: ⚠️ **TRIGGER RECONCILE IMMEDIATELY** (see below)
+   - **Research session completes**: Mark phase as researched, add to planning queue
+   - **Execute session completes** (execute-phase):
+     - All plans in phase are done (with internal verification)
+     - **IMMEDIATELY start phase-level verify** in an open slot
    - **Verify session completes**:
      - Mark phase as verified in orchestrator_state.verified_phases
      - **This unlocks planning for next phase**
      - Log: "Phase N verified - unlocking Phase N+1 planning"
-   - **Reconcile session completes**: Clear pending_reconcile, next execute can start
    - **Admin session completes**: Log result, continue
 
    **THEN start new work in the now-free slot:**
@@ -806,24 +819,20 @@ One tool call replaces dozens of polling calls. Much more efficient!
 
    **❌ NEVER type into a completed session's prompt - ALWAYS end + start fresh!**
 
-   **⚠️ CRITICAL: RECONCILE AFTER EVERY EXECUTION**
+   **⚠️ execute-phase SIMPLIFIES THE FLOW**
 
-   When an execute session completes, this is MANDATORY before starting the next execute:
-   1. Identify what was just built (e.g., `05-01-SUMMARY.md`)
-   2. Identify the next pending plan (e.g., `05-02-PLAN.md`)
-   3. **IMMEDIATELY start reconcile in ANY available slot:**
+   When execute-phase completes:
+   1. All plans in the phase have been executed (with wave parallelism)
+   2. Plan-level verification happened internally
+   3. Reconciliation happened internally
+   4. **ONLY need phase-level verify from orchestrator**
 
    ```
-   gsd_start_session(workingDir, "Review .planning/phases/05-xxx/05-02-PLAN.md against
-     the just-completed 05-01-SUMMARY.md. Check if any APIs, file paths, component names,
-     or patterns need updating based on what was actually built. Make minimal targeted
-     updates only - don't rewrite the plan.")
+   execute-phase 3 completes →
+   gsd_start_session(workingDir, "/gsd:verify-work phase-3")  ← PHASE VERIFY
    ```
 
-   4. Set: `orchestrator_state.pending_reconcile = { next_plan: "05-02-PLAN.md", last_summary: "05-01-SUMMARY.md" }`
-   5. **DO NOT start next execute until reconcile completes**
-
-   This prevents plans from drifting out of sync with the actual implementation.
+   No more tracking individual plan reconciliation!
 
 4. **Handle failed sessions:**
    - Get output via `gsd_get_output(sessionId, lines=100)`
@@ -1052,19 +1061,24 @@ Phase 3 Example:
 
 For each free slot, check task priority:
 
-1. Is there an unverified executed plan? → VERIFY (plan-level)
-2. Are all plans in phase verified but phase not? → VERIFY (phase-level)
-3. Did execution just complete? → RECONCILE next plan
-4. Is current plan verified and next plan reconciled? → EXECUTE
-5. Is phase-level verify gate open for next phase? → PLAN
-6. Any admin tasks? → ADMIN
+1. Did execute-phase just complete? → VERIFY (phase-level)
+2. Is execution queue ready and maxExecutePhase allows? → EXECUTE (execute-phase)
+3. Any phases need research? → RESEARCH (can run multiple in parallel!)
+4. Is research done and phase needs planning? → PLAN
+5. Any admin tasks? → ADMIN
 
-**Verify is NOT optional at EITHER level:**
+**Optimal slot distribution during execution:**
 
-- After EACH plan executes → verify that plan
-- After ALL plans verified → verify the phase
-  Both levels are mandatory quality gates.
-  </step>
+```
+Slot 1: execute-phase N        # Building current phase
+Slot 2: research-phase N+1     # Preparing next phase
+Slot 3: research-phase N+2     # Preparing future phase
+Slot 4: idle                   # Ready for verify when execute completes
+```
+
+**Verification is still mandatory** - but plan-level is handled internally by execute-phase.
+Orchestrator only needs to run phase-level verify after execute-phase completes.
+</step>
 
 <step name="progress_reporting">
 Periodically display overall progress:
@@ -1169,11 +1183,13 @@ Quick reference for harness MCP tools:
 - Purpose: Start work in an available slot
 - Args: `workingDir`, `command`
 - Task types (any slot):
-  - Verify: `/gsd:verify-work [phase]`
-  - Reconcile: `"Review [PLAN.md] against [SUMMARY.md]..."`
-  - Execute: `/gsd:execute-plan [path]`
+  - Verify: `/gsd:verify-work phase-N` (phase-level verify)
+  - Execute: `/gsd:execute-phase N` (all plans with wave parallelism)
+  - Research: `/gsd:research-phase N` (prepare future phases)
   - Plan: `/gsd:plan-phase X`
   - Admin: `npm test`, `npm build`, etc.
+
+Note: Reconcile removed - handled internally by execute-phase.
 
 **gsd_end_session**
 
@@ -1295,21 +1311,24 @@ gsd_sync_project_state(projectPath)
 
 # Orchestrator:
 # 1. Checks harness - 4 slots available
-# 2. Builds queues - Phase 1 needs planning
-# 3. Assigns free slot: /gsd:plan-phase 1
-# 4. Uses gsd_wait_for_state_change to wait efficiently
-# 5. When planning done: Assigns execution to a free slot
-# 6. After execution: Reconciles next plan, then executes
-# 7. After phase complete: Runs verify (must pass to unlock next phase)
-# 8. Pipeline runs until complete - priority order enforced
+# 2. Builds queues - Phase 1 needs research & planning
+# 3. Assigns slots in parallel:
+#    - Slot 1: /gsd:research-phase 1
+#    - Slot 2: /gsd:research-phase 2
+#    - Slot 3: /gsd:research-phase 3
+# 4. When research 1 done: /gsd:plan-phase 1
+# 5. When planning done: /gsd:execute-phase 1 (runs all plans with wave parallelism)
+# 6. While executing: Research continues in parallel slots
+# 7. After execute-phase 1 completes: /gsd:verify-work phase-1
+# 8. Pipeline runs until complete - research always running ahead
 ```
 
-**Pipeline with verify gates and reconciliation:**
+**Pipeline with execute-phase and research-ahead:**
 
 ```
-Slot 1: [Plan P1] → [Execute 01-01] → [Reconcile 01-02] → [Execute 01-02] → [Verify P1]
-Slot 2: [Plan P2] → [Execute 02-01] → [Reconcile 02-02] → idle
-Slot 3: [Admin] → [Execute 02-02] → [Verify P2] → idle
+Slot 1: [Research P1] → [Plan P1] → [Execute Phase 1] → [Verify P1] → [Execute P2]
+Slot 2: [Research P2] → [Research P3] → [Plan P2] → [Plan P3] → idle
+Slot 3: [Research P4] → [Research P5] → [Verify P2] → idle
 Slot 4: [Admin] → [Admin] → [Admin]
 ```
 
@@ -1444,11 +1463,11 @@ Respond with:
 **DO:**
 
 - **Run autonomously until complete** - NEVER pause to ask user "continue?"
-- Follow task priority: Verify → Reconcile → Execute → Plan → Admin
+- Follow task priority: Verify → Execute → Research → Plan → Admin
 - Use `gsd_wait_for_state_change` for efficient monitoring (not polling!)
 - END sessions when complete, START fresh sessions for new work
-- Run VERIFY after EACH PLAN executes, then again after whole phase completes
-- Run RECONCILE before each execution (validate plan against reality)
+- Run VERIFY (phase-level) after execute-phase completes
+- Run RESEARCH in parallel slots while executing (research-ahead!)
 - Respond to prompts with simple inputs ("1", "y", "\r")
 - ALWAYS start new sessions through the harness, regardless of previous failures
 
@@ -1457,50 +1476,53 @@ Respond with:
 - **NEVER pause to ask user "continue?" or "proceed?"** - run autonomously!
 - **NEVER monitor one session in a loop without checking other slots** - call gsd_list_sessions after EVERY wait!
 - **NEVER skip verification questions** - if session asks "Does X work?", YOU must test X!
-- Skip verify - it's required after EACH PLAN and after each PHASE
-- Skip reconciliation - plans must match reality before execution
+- Skip phase-level verify - it's required after execute-phase completes
+- Skip research - research ALL phases by default
 - Reuse completed sessions - always end and start fresh
 - Poll repeatedly with gsd_get_output - use gsd_wait_for_state_change
 - Type commands into existing session prompts
 - Start planning Phase N+1 before Phase N is verified
 - Ignore sessions waiting for input
-- Let slots sit idle when there's queued work
+- Let slots sit idle when there's queued work - fill with research!
 - NEVER execute work directly in the orchestrator session
 
 **Parallel is the goal (with quality gates):**
 
 - All 4 slots can be busy simultaneously with any task type
-- Priority order ensures verify and reconcile run when needed
-- Pipeline: Execute → Reconcile → Execute → ... → Verify → Unlock next phase
+- Execute-phase handles internal parallelism (wave-based)
+- Research runs ahead in parallel slots while executing
+- Pipeline: Execute Phase → Phase Verify → (research already done) → Plan next → Execute next
 
-**Wave Metadata and Alternative Approaches:**
+**Wave Metadata and Execution Strategy:**
 
-GSD v1.5.17 introduced wave-based planning with `wave:`, `depends_on:`, `files_modified:` in plan frontmatter. This enables two execution strategies:
+GSD v1.5.17 introduced wave-based planning with `wave:`, `depends_on:`, `files_modified:` in plan frontmatter.
 
-| Strategy                  | Command                    | Parallelism                     | Verification             |
-| ------------------------- | -------------------------- | ------------------------------- | ------------------------ |
-| **Current (Recommended)** | `/gsd:execute-plan [path]` | Sequential plans, harness slots | Plan-level + Phase-level |
-| **Alternative (Speed)**   | `/gsd:execute-phase X`     | Wave-based internal parallelism | Phase-level only         |
+| Strategy                           | Command                    | Parallelism                     | Verification             |
+| ---------------------------------- | -------------------------- | ------------------------------- | ------------------------ |
+| **Current (Recommended)**          | `/gsd:execute-phase N`     | Wave-based internal parallelism | Plan + Phase (internal)  |
+| **Alternative (Granular Control)** | `/gsd:execute-plan [path]` | Sequential plans, harness slots | Plan-level + Phase-level |
 
 **Current approach (this template):**
 
-- Orchestrator runs individual plans via `/gsd:execute-plan`
-- Verify each plan before executing the next
-- Reconcile between plans
-- Maximum quality control, catches issues early
-
-**Alternative approach (for speed-focused projects):**
-
-- Orchestrator runs `/gsd:execute-phase X` in a slot
+- Orchestrator runs `/gsd:execute-phase N` in a slot
 - GSD's execute-phase uses Task tool to spawn subagents for parallel wave execution
-- Only phase-level verification at the end
-- Faster but less granular issue detection
+- Plan-level verification handled internally after each plan
+- Reconciliation handled internally between plans
+- Phase-level verification by orchestrator after execute-phase completes
+- **Slots freed for research-ahead** while execution runs
 
-**When to consider the alternative:**
+**Alternative approach (for debugging/troubleshooting):**
 
-- Large phases with many independent plans (Wave 1 has 4+ plans)
-- High confidence in plan quality (mature codebase, established patterns)
-- Time-critical delivery where speed > granular verification
+- Orchestrator runs individual plans via `/gsd:execute-plan`
+- Manual verify each plan before executing the next
+- Manual reconcile between plans
+- Maximum control for investigating issues
+
+**When to use the alternative:**
+
+- Debugging a specific plan that keeps failing
+- Need to manually inspect state between plans
+- Very complex integrations where you want step-by-step control
 
 **Harness constraint remains:** Only ONE execute slot at a time, regardless of strategy.
 The internal wave parallelism happens WITHIN a session, not across slots.

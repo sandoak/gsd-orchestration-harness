@@ -1,3 +1,22 @@
+# Research Pitfalls Reference
+
+## DEPRECATED
+
+**This reference has been consolidated into the gsd-researcher agent.**
+
+The verification protocols and pitfall patterns now live in:
+
+- `agents/gsd-researcher.md` (section: `<verification_protocol>`)
+
+The content below is preserved for reference but is no longer the primary source.
+
+---
+
+_Deprecated: 2026-01-15_
+_Replaced by: agents/gsd-researcher.md_
+
+---
+
 <research_pitfalls>
 
 <purpose>
@@ -15,11 +34,11 @@ This document catalogs research mistakes discovered in production use, providing
 ```xml
 <verification_checklist>
 **CRITICAL**: Verify ALL configuration scopes:
-□ User/global scope - System-wide configuration
-□ Project scope - Project-level configuration files
-□ Local scope - Project-specific user overrides
-□ Workspace scope - IDE/tool workspace settings
-□ Environment scope - Environment variables
+- User/global scope - System-wide configuration
+- Project scope - Project-level configuration files
+- Local scope - Project-specific user overrides
+- Workspace scope - IDE/tool workspace settings
+- Environment scope - Environment variables
 </verification_checklist>
 ```
 
@@ -27,7 +46,7 @@ This document catalogs research mistakes discovered in production use, providing
 
 <pitfall_search_vagueness>
 **What**: Asking researchers to "search for documentation" without specifying where
-**Example**: "Research MCP documentation" → finds outdated community blog instead of official docs
+**Example**: "Research MCP documentation" -> finds outdated community blog instead of official docs
 **Why it happens**: Vague research instructions don't specify exact sources
 **Prevention**:
 
@@ -53,10 +72,10 @@ Search queries (use WebSearch):
 
 ```xml
 <verification_checklist>
-□ Check current official documentation
-□ Review changelog/release notes for recent updates
-□ Verify version numbers and publication dates
-□ Cross-reference multiple authoritative sources
+- Check current official documentation
+- Review changelog/release notes for recent updates
+- Verify version numbers and publication dates
+- Cross-reference multiple authoritative sources
 </verification_checklist>
 ```
 
@@ -64,16 +83,16 @@ Search queries (use WebSearch):
 
 <pitfall_tool_variations>
 **What**: Conflating capabilities across different tools/environments
-**Example**: "Claude Desktop supports X" ≠ "Claude Code supports X"
+**Example**: "Claude Desktop supports X" does not mean "Claude Code supports X"
 **Why it happens**: Not explicitly checking each environment separately
 **Prevention**:
 
 ```xml
 <verification_checklist>
-□ Claude Desktop capabilities
-□ Claude Code capabilities
-□ VS Code extension capabilities
-□ API/SDK capabilities
+- Claude Desktop capabilities
+- Claude Code capabilities
+- VS Code extension capabilities
+- API/SDK capabilities
 Document which environment supports which features
 </verification_checklist>
 ```
@@ -107,10 +126,10 @@ For any "X is not possible" or "Y is the only way" statement:
 ```xml
 <verification_checklist>
 Enumerate ALL known options FIRST:
-□ Option 1: [specific item]
-□ Option 2: [specific item]
-□ Option 3: [specific item]
-□ Check for additional unlisted options
+- Option 1: [specific item]
+- Option 2: [specific item]
+- Option 3: [specific item]
+- Check for additional unlisted options
 
 For each option above, document:
 - Existence (confirmed/not found/unclear)
