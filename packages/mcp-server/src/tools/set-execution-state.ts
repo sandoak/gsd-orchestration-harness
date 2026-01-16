@@ -75,6 +75,8 @@ export function registerSetExecutionStateTool(
       // If forceReset, clear all project state first
       if (forceReset) {
         orchestrationStore.clearProject(projectPath);
+        // Ensure a new row exists (getState creates one if missing)
+        orchestrationStore.getState(projectPath);
         console.log(`[mcp] Force reset: cleared all state for ${projectPath}`);
       }
 
