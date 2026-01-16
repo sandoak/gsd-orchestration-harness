@@ -1,7 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 
-import Database from 'better-sqlite3';
+import Database, { type Database as DatabaseType } from 'better-sqlite3';
 
 // Database path from environment variable or default
 const DB_PATH = process.env.TASKFLOW_DB_PATH || './data/taskflow.db';
@@ -13,7 +13,7 @@ if (!fs.existsSync(dbDir)) {
 }
 
 // Create database connection
-export const db = new Database(DB_PATH);
+export const db: DatabaseType = new Database(DB_PATH);
 
 // Enable WAL mode for better concurrent access
 db.pragma('journal_mode = WAL');

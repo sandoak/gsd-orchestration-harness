@@ -1,8 +1,14 @@
 import cors from 'cors';
 import express, { Express } from 'express';
 
+import { createTables, initializeDatabase } from './db/index.js';
+
 const app: Express = express();
 const PORT = process.env.PORT || 3001;
+
+// Initialize database
+initializeDatabase();
+createTables();
 
 app.use(cors());
 app.use(express.json());
