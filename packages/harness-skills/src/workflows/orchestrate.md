@@ -24,7 +24,19 @@ cat packages/harness-skills/src/workflows/orchestrate.md | head -200
 - Only using 1-2 slots when 4 are available
 - Skipping verification after execution
 - Doing work yourself instead of spawning sessions
-  </on_context_compaction>
+- **Declaring spec "complete" without checking AUDIT.md exists**
+- **Offering user options like "Would you like me to..."**
+
+**🛑 AUDIT CHECK (ALWAYS DO THIS):**
+
+If spec looks complete (STATUS.md says complete, UAT passed):
+
+```bash
+ls -la $SPEC_DIR/AUDIT.md 2>/dev/null || echo "MISSING"
+```
+
+If AUDIT.md missing → Run `/harness:audit-milestone` FIRST. Never skip this.
+</on_context_compaction>
 
 <global_resources>
 
@@ -74,6 +86,33 @@ mcp__playwright__browser_evaluate({
 ## ⚠️ ORCHESTRATOR CRITICAL RULES (Re-read if context compacted)
 
 **IF UNSURE, RE-READ THIS FILE:** `cat packages/harness-skills/src/workflows/orchestrate.md`
+
+### 🛑 SPEC COMPLETION CHECK (FIRST THING TO DO!)
+
+**Before declaring ANY spec "complete", you MUST check:**
+
+```bash
+# MANDATORY: Check for AUDIT.md
+ls -la $SPEC_DIR/AUDIT.md 2>/dev/null || echo "NO AUDIT - CANNOT DECLARE COMPLETE"
+```
+
+```
+❌ WRONG: STATUS.md says "complete" → "The spec is complete!"
+❌ WRONG: All UAT passed → "No further work needed!"
+❌ WRONG: "Would you like me to: 1. Push 2. Create PR 3. ..."
+✅ RIGHT: Check AUDIT.md exists → If missing, run /harness:audit-milestone → THEN report
+```
+
+**If AUDIT.md is MISSING:**
+
+1. DO NOT declare the spec complete
+2. DO NOT offer options to the user
+3. IMMEDIATELY run: `harness_start_session(workingDir, "/harness:audit-milestone")`
+4. Wait for audit to complete
+5. ONLY THEN can spec be considered complete
+
+**STATUS.md "complete" + All UAT passed ≠ Spec Complete**
+**STATUS.md "complete" + AUDIT.md with 100% adherence = Spec Complete**
 
 ### SESSION LIFECYCLE (Most Common Mistake)
 
