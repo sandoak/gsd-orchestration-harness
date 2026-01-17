@@ -593,6 +593,51 @@ The `harness_list_sessions` response may show previous failed sessions - these a
 What matters is: Are slots available? Start fresh sessions regardless of failure history.
 </step>
 
+<step name="check_audit_completion">
+**⚠️ CRITICAL: Even if STATUS.md shows "complete", verify audit was performed!**
+
+STATUS.md showing "complete" is NOT sufficient. You MUST verify:
+
+```bash
+# Check for AUDIT.md existence
+ls -la $SPEC_DIR/AUDIT.md 2>/dev/null || echo "NO AUDIT FOUND"
+```
+
+**If AUDIT.md does NOT exist:**
+
+```
+⚠️ SPEC MARKED COMPLETE BUT NO AUDIT PERFORMED!
+
+STATUS.md says "complete" but AUDIT.md is missing.
+This means the spec was never compared against requirements.
+
+AUDIT IS MANDATORY. Starting /harness:audit-milestone now.
+```
+
+**THEN run audit:**
+
+```
+harness_start_session(workingDir, "/harness:audit-milestone")
+```
+
+**Do NOT accept STATUS.md "complete" status without AUDIT.md present!**
+
+This catches the case where:
+
+- All phases executed and verified via UAT
+- Someone marked spec complete prematurely
+- But audit-milestone was never run to compare against requirements
+
+**If AUDIT.md EXISTS:**
+
+Read it and check the result:
+
+- `adherence: 100%` → Spec is legitimately complete
+- `gaps_found: [list]` → Gaps still need remediation
+
+Only if AUDIT.md exists AND shows 100% adherence can you accept the spec as complete.
+</step>
+
 <step name="handle_reverify_command">
 **If REVERIFY_PHASES is set, schedule re-verification:**
 
