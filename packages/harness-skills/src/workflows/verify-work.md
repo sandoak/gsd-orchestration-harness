@@ -135,6 +135,107 @@ APP_BASE_URL={DEV_SERVER_URL}
 
 </step>
 
+<step name="configure_auth_bypass">
+**CRITICAL: Set up authentication bypass BEFORE testing protected routes**
+
+This step detects and configures auth bypass mechanisms so Playwright can access protected areas without real OAuth/magic link login.
+
+**1. Detect bypass patterns in codebase:**
+
+```bash
+# Check for cookie-based bypass (middleware level)
+grep -r "dev.*bypass" --include="*.ts" --include="*.tsx" -l . 2>/dev/null | head -5
+
+# Check for header-based bypass (Playwright test secret)
+grep -r "x-playwright-test-secret\|PLAYWRIGHT_TEST_SECRET" --include="*.ts" --include="*.tsx" -l . 2>/dev/null | head -5
+
+# Check for bypass env vars
+cat .env.local .env 2>/dev/null | grep -i "bypass\|playwright.*secret"
+```
+
+**2. Identify bypass type:**
+
+| Pattern Found                    | Bypass Type | How to Apply                               |
+| -------------------------------- | ----------- | ------------------------------------------ |
+| `dev-admin-bypass`               | Cookie      | Set cookie via Playwright evaluate         |
+| `dev-web-bypass`                 | Cookie      | Set cookie via Playwright evaluate         |
+| `x-playwright-test-secret`       | Header      | Set header via Playwright extraHTTPHeaders |
+| `PLAYWRIGHT_TEST_SECRET` in .env | Header      | Read secret, set header                    |
+
+**3. Apply cookie-based bypass (if detected):**
+
+```typescript
+// Detect which app we're testing
+const isAdmin = APP_BASE_URL.includes('3001') || APP_BASE_URL.includes('admin');
+const cookieName = isAdmin ? 'dev-admin-bypass' : 'dev-web-bypass';
+
+// Set bypass cookie via JavaScript
+mcp__playwright__browser_evaluate({
+  function: `() => { document.cookie = '${cookieName}=true; path=/'; return document.cookie; }`,
+});
+
+// Refresh to apply cookie
+mcp__playwright__browser_navigate({ url: APP_BASE_URL });
+```
+
+**4. Apply header-based bypass (if detected):**
+
+```bash
+# Read the secret from env
+PLAYWRIGHT_SECRET=$(grep PLAYWRIGHT_TEST_SECRET .env.local 2>/dev/null | cut -d= -f2)
+if [ -z "$PLAYWRIGHT_SECRET" ]; then
+  PLAYWRIGHT_SECRET=$(grep PLAYWRIGHT_TEST_SECRET .env 2>/dev/null | cut -d= -f2)
+fi
+```
+
+If secret found, set extraHTTPHeaders in Playwright:
+
+```typescript
+// Header-based bypass requires custom page setup
+// Note: This may require Playwright code execution
+mcp__playwright__browser_run_code({
+  code: `async (page) => {
+    await page.setExtraHTTPHeaders({
+      'x-playwright-test-secret': '${PLAYWRIGHT_SECRET}'
+    });
+  }`,
+});
+```
+
+**5. Verify bypass works:**
+
+```typescript
+// Navigate to a protected route to verify bypass
+const protectedUrl = APP_BASE_URL.includes('admin')
+  ? APP_BASE_URL + '/'
+  : APP_BASE_URL + '/account';
+
+mcp__playwright__browser_navigate({ url: protectedUrl });
+const snapshot = mcp__playwright__browser_snapshot({});
+
+// Check if we're authenticated (not on login page)
+// Look for: dashboard content, user menu, protected elements
+// NOT: "Login", "Sign in", "Unauthorized", redirect to /login
+```
+
+**6. Store bypass configuration:**
+
+```
+AUTH_BYPASS_TYPE={cookie|header|none}
+AUTH_BYPASS_APPLIED={true|false}
+AUTH_BYPASS_COOKIE={cookie name if applicable}
+AUTH_BYPASS_HEADER={header name if applicable}
+```
+
+**IMPORTANT:** If bypass detection fails, TRY ANYWAY with common patterns:
+
+1. First try cookie: `dev-admin-bypass=true`
+2. Then check for `PLAYWRIGHT_TEST_SECRET` in env files
+3. Only fall back to code review if ALL bypass attempts fail AND feature requires auth
+
+**NEVER immediately fall back to code review when hitting an auth wall. Try bypasses first.**
+</step>
+
 <step name="check_active_session">
 **First: Check for active UAT sessions**
 
@@ -385,13 +486,51 @@ mcp__playwright__browser_navigate({ url: '{test.url}' });
 // 2. Take snapshot to see current state
 const snapshot = mcp__playwright__browser_snapshot({});
 
-// 3. Perform actions (click, type, etc.)
+// 3. CHECK FOR AUTH WALL before proceeding
+// If snapshot shows login page, unauthorized message, or redirect to /login:
+if (
+  snapshot.includes('login') ||
+  snapshot.includes('unauthorized') ||
+  snapshot.includes('sign in')
+) {
+  // AUTH WALL DETECTED - Apply bypass before giving up
+  console.log('Auth wall detected, applying bypass...');
+
+  // Try cookie bypass first
+  mcp__playwright__browser_evaluate({
+    function:
+      "() => { document.cookie = 'dev-admin-bypass=true; path=/'; return document.cookie; }",
+  });
+
+  // Retry navigation
+  mcp__playwright__browser_navigate({ url: '{test.url}' });
+  const retrySnapshot = mcp__playwright__browser_snapshot({});
+
+  // If still auth wall, try header bypass
+  if (retrySnapshot.includes('login') || retrySnapshot.includes('unauthorized')) {
+    // Header bypass requires PLAYWRIGHT_TEST_SECRET from env
+    // See configure_auth_bypass step for setup
+  }
+
+  // ONLY after ALL bypass attempts fail, consider this test blocked by auth
+  // Record as ERROR with auth_wall reason, NOT as "needs code review"
+}
+
+// 4. Perform actions (click, type, etc.)
 mcp__playwright__browser_click({ element: '{description}', ref: '{ref from snapshot}' });
 
-// 4. Verify expected outcome
+// 5. Verify expected outcome
 const afterSnapshot = mcp__playwright__browser_snapshot({});
 // Check if expected element/text is present
 ```
+
+**Auth wall handling priority:**
+
+1. Apply cookie bypass → retry test
+2. Apply header bypass → retry test
+3. Check if feature truly requires auth (some don't)
+4. Record as ERROR with `auth_wall: true` flag
+5. **NEVER** fall back to code review just because auth failed
 
 **For API tests (type: api):**
 
@@ -731,9 +870,18 @@ mcp__playwright__browser_close({});
 
 - [ ] Dev server started (or confirmed running)
 - [ ] Playwright initialized and connected
+- [ ] Auth bypass detected and configured (if protected routes)
 - [ ] UI tests executed via Playwright (navigate, click, verify)
 - [ ] API tests executed via curl
 - [ ] Database tests executed via query/RPC
+
+**Auth Bypass (REQUIRED before falling back to code review):**
+
+- [ ] Searched codebase for bypass patterns (cookie, header)
+- [ ] Checked .env files for PLAYWRIGHT_TEST_SECRET
+- [ ] Attempted cookie bypass on auth wall
+- [ ] Attempted header bypass if secret available
+- [ ] Only fall back to code review if feature CANNOT be tested at runtime
 
 **Recording:**
 
