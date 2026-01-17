@@ -784,12 +784,37 @@ Present summary:
 
 **If issues == 0:**
 
+Check if this is the LAST phase in ROADMAP.md:
+
+```bash
+# Get highest phase number from ROADMAP.md
+LAST_PHASE=$(grep -E "^## Phase [0-9]+" "$SPEC_DIR/ROADMAP.md" | tail -1 | grep -oE "[0-9]+")
 ```
-All tests passed. Ready to continue.
+
+**If this is the LAST phase (phase == LAST_PHASE):**
+
+```
+All tests passed. Phase {phase} verification COMPLETE.
+
+⚠️ ALL PHASES VERIFIED - AUDIT REQUIRED BEFORE SPEC CAN BE MARKED COMPLETE
+
+Verification confirms the phase WORKS. Audit confirms the SPEC MEETS REQUIREMENTS.
+
+- `/harness:audit-milestone` — Compare deliverables against requirements (REQUIRED)
+```
+
+**nextCommand for checkpoint:** `/harness:audit-milestone`
+
+**If more phases remain (phase < LAST_PHASE):**
+
+```
+All tests passed. Phase {phase} verification complete.
 
 - `/harness:plan-phase {next}` — Plan next phase
 - `/harness:execute-phase {next}` — Execute next phase
 ```
+
+**nextCommand for checkpoint:** `/harness:execute-phase {next}` or `/harness:plan-phase {next}`
 
 </step>
 

@@ -207,6 +207,26 @@ Check this directory for database credentials, API keys, and server connection i
 2. Don't assume - CHECK
 3. Report pass/fail based on actual results
 
+### MANDATORY AUDIT BEFORE COMPLETION (NEVER SKIP!)
+
+```
+❌ WRONG: All phases verified → "Spec is complete!" → Close session
+❌ WRONG: "All tests passed, marking spec as done"
+✅ RIGHT: All phases verified → /harness:audit-milestone → Handle gaps → THEN complete
+```
+
+**After the LAST phase verifies successfully, you MUST:**
+
+1. **RUN AUDIT**: `harness_start_session(workingDir, "/harness:audit-milestone")`
+2. **Compare** what was built against original PROJECT.md/REQUIREMENTS.md
+3. **If GAPS_FOUND**: Create remediation phases, execute them, verify, audit again
+4. **If ADHERENCE_100%**: ONLY THEN declare spec complete
+
+**The verify-work workflow does NOT check spec adherence.** It only verifies the PHASE works.
+The AUDIT compares the ENTIRE deliverable against original requirements.
+
+**Without audit, you're shipping incomplete work!**
+
 ### STATE RECONCILIATION AT STARTUP
 
 ```
@@ -1081,8 +1101,17 @@ One tool call replaces dozens of polling calls. Much more efficient!
      - **IMMEDIATELY start phase-level verify** in an open slot
    - **Verify session completes**:
      - Mark phase as verified in orchestrator_state.verified_phases
-     - **This unlocks planning for next phase**
-     - Log: "Phase N verified - unlocking Phase N+1 planning"
+     - Check if this was the LAST PHASE (check ROADMAP.md or session output)
+     - **If LAST PHASE**:
+       - **IMMEDIATELY start audit**: `harness_start_session(workingDir, "/harness:audit-milestone")`
+       - DO NOT declare spec complete until audit passes!
+     - **If more phases remain**:
+       - This unlocks planning for next phase
+       - Log: "Phase N verified - unlocking Phase N+1 planning"
+   - **Audit session completes**:
+     - Check result: ADHERENCE_100% or GAPS_FOUND
+     - If GAPS_FOUND: New remediation phases were created, continue orchestration
+     - If ADHERENCE_100%: NOW spec is complete, proceed to completion step
    - **Admin session completes**: Log result, continue
 
    **THEN start new work in the now-free slot:**
@@ -1901,10 +1930,15 @@ Orchestration succeeds when:
 - [ ] All plans reconciled (validated against reality before execution)
 - [ ] All plans executed
 - [ ] All phases verified (quality gates passed)
+- [ ] **Milestone audit run** (compares deliverables against requirements)
+- [ ] **Audit passes** (ADHERENCE_100% or gaps remediated)
 - [ ] All checkpoints/prompts handled
 - [ ] No failed sessions (or failures acknowledged)
-- [ ] STATE.md updated with completion
-      </success_criteria>
+- [ ] STATE.md/STATUS.md updated with completion
+
+**⚠️ CRITICAL: Verification passing does NOT mean spec is complete!**
+Verification confirms phases WORK. Audit confirms spec MEETS REQUIREMENTS.
+</success_criteria>
 
 <guidelines>
 
