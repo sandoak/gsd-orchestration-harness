@@ -1,3 +1,4 @@
+import { execSync } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -5,6 +6,27 @@ import { fileURLToPath } from 'node:url';
 import cors from '@fastify/cors';
 import fastifyStatic from '@fastify/static';
 import Fastify, { type FastifyInstance } from 'fastify';
+
+/**
+ * Server version - update on significant changes.
+ */
+const SERVER_VERSION = '0.2.0';
+
+/**
+ * Get git commit hash (cached at startup).
+ */
+const GIT_COMMIT = ((): string => {
+  try {
+    return execSync('git rev-parse --short HEAD', { encoding: 'utf-8' }).trim();
+  } catch {
+    return 'unknown';
+  }
+})();
+
+/**
+ * Build timestamp (when this module was loaded).
+ */
+const BUILD_TIME = new Date().toISOString();
 
 export interface FastifyServerOptions {
   /**
@@ -111,9 +133,14 @@ export class FastifyServer {
    * Registers core routes (health check).
    */
   private registerRoutes(): void {
-    // Health check endpoint
+    // Health check endpoint with version info
     this.app.get('/health', async () => {
-      return { status: 'ok' };
+      return {
+        status: 'ok',
+        version: SERVER_VERSION,
+        commit: GIT_COMMIT,
+        started: BUILD_TIME,
+      };
     });
   }
 
