@@ -8,13 +8,8 @@ import fastifyStatic from '@fastify/static';
 import Fastify, { type FastifyInstance } from 'fastify';
 
 /**
- * Base version - bump major/minor manually for breaking changes.
- * Patch number is auto-calculated from git commit count.
- */
-const VERSION_BASE = '0.2';
-
-/**
  * Get version info from git (cached at startup).
+ * Version is simply the commit count - no manual bumping needed.
  */
 const GIT_INFO = ((): { commit: string; version: string } => {
   try {
@@ -22,12 +17,12 @@ const GIT_INFO = ((): { commit: string; version: string } => {
     const commitCount = execSync('git rev-list --count HEAD', { encoding: 'utf-8' }).trim();
     return {
       commit,
-      version: `${VERSION_BASE}.${commitCount}`,
+      version: `build.${commitCount}`,
     };
   } catch {
     return {
       commit: 'unknown',
-      version: `${VERSION_BASE}.0`,
+      version: 'build.0',
     };
   }
 })();
