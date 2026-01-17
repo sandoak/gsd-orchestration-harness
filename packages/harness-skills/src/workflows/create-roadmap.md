@@ -1,37 +1,88 @@
 <purpose>
-Define the phases of implementation. Each phase is a coherent chunk of work
-that delivers value. Phases map to requirements — every v1 requirement must
-belong to exactly one phase.
+Define the phases of implementation for spec-centric projects. Each phase is a
+coherent chunk of work that delivers value. Phases map to requirements — every
+v1 requirement must belong to exactly one phase.
 
-The roadmap provides structure, not detailed tasks. But it ensures no
-requirements are orphaned and validates coverage before planning begins.
+The roadmap provides structure for orchestrated execution via /harness:orchestrate.
 </purpose>
+
+<spec_centric_structure>
+The harness uses spec-centric organization:
+
+```
+specs/
+└── SPC-001-project-mvp/
+    ├── SPEC.md           # Optional detailed spec
+    ├── REQUIREMENTS.md   # What must be built
+    ├── ROADMAP.md        # Phases and their plans
+    ├── STATUS.md         # Human-readable status
+    ├── STATE.md          # Machine-managed state (auto-updated by sync)
+    ├── planning/
+    │   └── plans/
+    │       ├── 01-foundation/
+    │       │   ├── 01-01-PLAN.md
+    │       │   └── 01-02-PLAN.md
+    │       └── 02-authentication/
+    │           └── 02-01-PLAN.md
+    └── execution/
+        └── phases/
+            └── (SUMMARYs written here after execution)
+```
+
+</spec_centric_structure>
 
 <required_reading>
 **Read these files NOW:**
 
-1. ./.harness/skills/templates/roadmap.md
-2. ./.harness/skills/templates/state.md
-3. ./.harness/skills/templates/requirements.md
-4. .planning/PROJECT.md
-5. .planning/REQUIREMENTS.md
-6. .planning/research/SUMMARY.md (if exists)
+1. ./packages/harness-skills/src/templates/roadmap.md (if exists)
+2. ./packages/harness-skills/src/templates/STATE.md
+3. specs/\*/REQUIREMENTS.md OR .planning/REQUIREMENTS.md
+4. specs/\*/SPEC.md OR .planning/PROJECT.md
    </required_reading>
 
 <process>
 
-<step name="load_requirements">
-Load and parse REQUIREMENTS.md:
+<step name="determine_spec_location">
+Check for existing specs or determine where to create:
 
 ```bash
-cat .planning/REQUIREMENTS.md
+# List existing specs
+ls -d specs/SPC-* 2>/dev/null || ls -d specs/*/ 2>/dev/null || echo "NO_SPECS"
 ```
 
-Extract:
+**If $ARGUMENTS provided:**
 
-- All v1 requirement IDs (AUTH-01, CONT-02, etc.)
-- Requirement categories (Authentication, Content, Social, etc.)
-- Total count of v1 requirements
+- Use as spec-id (e.g., "SPC-001-mvp") or path
+
+**If specs exist but no argument:**
+
+- List specs and ask which to use or create new
+
+**If no specs:**
+
+- Prompt for new spec-id: `SPC-XXX-short-name`
+
+Set: `SPEC_DIR=specs/{spec-id}`
+</step>
+
+<step name="load_requirements">
+Find and parse REQUIREMENTS.md:
+
+```bash
+# Try spec-specific first, then fall back to .planning/
+cat $SPEC_DIR/REQUIREMENTS.md 2>/dev/null || \
+cat .planning/REQUIREMENTS.md 2>/dev/null || \
+echo "NO_REQUIREMENTS"
+```
+
+**If NO_REQUIREMENTS:**
+Ask user to create requirements or point to existing file.
+
+**Parse requirements:**
+
+- Extract all requirement IDs (AUTH-01, CONT-02, etc.)
+- Group by category (Authentication, Content, etc.)
+- Count total v1 requirements
 
 ```
 Requirements loaded:
@@ -39,7 +90,6 @@ Requirements loaded:
 Categories: [N]
 - Authentication: [X] requirements
 - Content: [Y] requirements
-- Social: [Z] requirements
 ...
 
 Total v1 requirements: [N]
@@ -475,40 +525,68 @@ Loop until "Create roadmap" selected.
 
 <step name="create_structure">
 ```bash
-mkdir -p .planning/phases
-````
-
+# Create spec-centric directory structure
+mkdir -p $SPEC_DIR/planning/plans
+mkdir -p $SPEC_DIR/execution/phases
+```
 </step>
 
 <step name="write_roadmap">
-Use template from `./.harness/skills/templates/roadmap.md`.
+Write ROADMAP.md with YAML frontmatter to `$SPEC_DIR/ROADMAP.md`:
 
-Initial roadmaps use integer phases (1, 2, 3...).
-Decimal phases added later via /harness:insert-phase command (if it exists).
+```markdown
+---
+version: 1
+project: {project-name}
+milestone: {milestone-name}
+spec_id: {spec-id}
+spec_dir: $SPEC_DIR
 
-Write to `.planning/ROADMAP.md` with:
+current_phase: 0
+current_plan: 0
+status: planned
 
-- Phase list with names and one-line descriptions
-- Dependencies (what must complete before what)
-- **Requirement mappings** (which REQ-IDs each phase covers):
-  ```markdown
-  ### Phase 1: Authentication
+total_phases: {N}
+completed_phases: 0
+total_plans: 0
+completed_plans: 0
+---
 
-  **Goal**: Secure user authentication
-  **Depends on**: Nothing (first phase)
-  **Requirements**: AUTH-01, AUTH-02, AUTH-03, AUTH-04
-  **Research**: Unlikely (established patterns)
-  ```
-- **Research flags** (from detect_research_needs step):
-  - `Research: Likely ([reason])` with `Research topics:` for flagged phases
-  - `Research: Unlikely ([reason])` for unflagged phases
-- Status tracking (all start as "not started")
+# {Project} {Milestone} Roadmap
+
+## Overview
+{Brief description}
+
+## Phase Summary
+| Phase | Name | Plans | Requirements | Research |
+|-------|------|-------|--------------|----------|
+| 1 | Foundation | TBD | SETUP-01..03 | Unlikely |
+| 2 | Authentication | TBD | AUTH-01..04 | Likely |
+
+## Phase 1: Foundation
+**Goal:** {goal}
+**Plan Directory:** `planning/plans/01-foundation/`
+
+### Requirements Covered
+- SETUP-01: ...
+- SETUP-02: ...
+
+### Success Criteria
+1. {criterion 1}
+2. {criterion 2}
+
+### Research
+Research: Unlikely (established patterns)
+
+---
+(Continue for each phase...)
+```
 
 Create phase directories:
 
 ```bash
-mkdir -p .planning/phases/01-{phase-name}
-mkdir -p .planning/phases/02-{phase-name}
+mkdir -p $SPEC_DIR/planning/plans/01-{phase-name}
+mkdir -p $SPEC_DIR/planning/plans/02-{phase-name}
 # etc.
 ```
 
@@ -544,85 +622,71 @@ Write updated REQUIREMENTS.md.
 
 <step name="initialize_project_state">
 
-Create or update STATE.md — the project's living memory.
+Create STATE.md — the project's living memory.
 
-```bash
-[ -f .planning/STATE.md ] && echo "STATE_EXISTS" || echo "NEW_STATE"
-```
-
-**If STATE_EXISTS:** Update Current Position and keep Accumulated Context.
-**If NEW_STATE:** Create fresh using template from `./.harness/skills/templates/state.md`.
-
-Write to `.planning/STATE.md`:
+Write to `$SPEC_DIR/STATE.md`:
 
 ```markdown
 # Project State
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated [today's date])
-
-**Core value:** [Copy Core Value from PROJECT.md]
-**Current focus:** Phase 1 — [First phase name]
+See: $SPEC_DIR/SPEC.md
+**Spec ID:** {spec-id}
+**Project:** {project-name}
+**Milestone:** {milestone-name}
 
 ## Current Position
 
-Phase: 1 of [N] ([First phase name])
-Plan: Not started
-Status: Ready to plan
-Last activity: [today's date] — Project initialized
+| Field | Value |
+|-------|-------|
+| Phase | 0 of {N} |
+| Plan | 0 of 0 |
+| Status | Ready to plan |
+| Last Activity | {today} |
 
-Progress: ░░░░░░░░░░ 0%
+Progress: [░░░░░░░░░░░░░░░░░░░░] 0%
 
-## Performance Metrics
+## Phase Summary
 
-**Velocity:**
+| Phase | Name | Plans | Executed | Verified |
+|-------|------|-------|----------|----------|
+| 1 | Foundation | TBD | - | - |
+| 2 | Authentication | TBD | - | - |
+...
 
-- Total plans completed: 0
-- Average duration: —
-- Total execution time: 0 hours
+## Verification Gate
 
-**By Phase:**
-
-| Phase | Plans | Total | Avg/Plan |
-| ----- | ----- | ----- | -------- |
-| —     | —     | —     | —        |
-
-**Recent Trend:**
-
-- Last 5 plans: —
-- Trend: —
-
-## Accumulated Context
-
-### Decisions
-
-Decisions are logged in PROJECT.md Key Decisions table.
-Recent decisions affecting current work:
-
-(None yet)
-
-### Pending Todos
-
-None yet.
-
-### Blockers/Concerns
-
-None yet.
+| Field | Value |
+|-------|-------|
+| Highest Executed Phase | 0 |
+| Highest Verified Phase | 0 |
+| Pending Verification | None |
 
 ## Session Continuity
 
-Last session: [today's date and time]
-Stopped at: Project initialization complete
-Resume file: None
+| Field | Value |
+|-------|-------|
+| Last Session | {today} |
+| Stopped At | Roadmap created |
+| Resume Command | `/harness:plan-phase 1` |
+
+## Accumulated Context
+
+### Key Decisions
+_None yet_
+
+### Deferred Issues
+_None_
+
+### Blockers
+_None_
+
+---
+_State file maintained by harness. Updated after each sync._
 ```
 
-**Key points:**
-
-- Project Reference points to PROJECT.md for full context
-- Claude reads PROJECT.md directly for requirements, constraints, decisions
-- This file will be read first in every future operation
-- This file will be updated after every execution
+**Note:** STATE.md will be auto-updated by `harness_sync_project_state` after execution.
 
 </step>
 
@@ -630,33 +694,38 @@ Resume file: None
 Commit roadmap with requirement mappings:
 
 ```bash
-git add .planning/ROADMAP.md .planning/STATE.md .planning/REQUIREMENTS.md
-git add .planning/phases/
+git add $SPEC_DIR/
 git commit -m "$(cat <<'EOF'
-docs: create roadmap ([N] phases, [X] requirements)
+docs({spec-id}): create roadmap ({N} phases, {X} requirements)
 
-[One-liner from PROJECT.md]
+{One-liner description}
 
 Phases:
-1. [phase-name]: [requirements covered]
-2. [phase-name]: [requirements covered]
-3. [phase-name]: [requirements covered]
+1. {phase-name}: {requirements covered}
+2. {phase-name}: {requirements covered}
+3. {phase-name}: {requirements covered}
 
 All v1 requirements mapped to phases.
+
+Co-Authored-By: Claude Opus 4.5 <noreply@anthropic.com>
 EOF
 )"
 ```
 
-Confirm: "Committed: docs: create roadmap ([N] phases, [X] requirements)"
+Confirm: "Committed: docs({spec-id}): create roadmap ({N} phases, {X} requirements)"
 </step>
 
 <step name="offer_next">
 ```
-Project initialized:
-- Brief: .planning/PROJECT.md
-- Roadmap: .planning/ROADMAP.md
-- State: .planning/STATE.md
-- Committed as: docs: initialize [project] ([N] phases)
+✓ Roadmap created: $SPEC_DIR/ROADMAP.md
+
+Structure:
+  $SPEC_DIR/
+  ├── ROADMAP.md        ← {N} phases defined
+  ├── REQUIREMENTS.md   ← {X} requirements mapped
+  ├── STATE.md          ← Initialized
+  └── planning/plans/   ← Phase directories ready
+- Committed as: docs({spec-id}): create roadmap
 
 ---
 
@@ -705,18 +774,18 @@ Phases are buckets of work, not project management artifacts.
 
 <success_criteria>
 Roadmap is complete when:
+- [ ] Spec directory identified or created ($SPEC_DIR)
 - [ ] REQUIREMENTS.md loaded and parsed
 - [ ] All v1 requirements mapped to exactly one phase (100% coverage)
-- [ ] **Success criteria derived** for each phase (2-5 observable behaviors)
-- [ ] **Success criteria cross-checked** against requirements (no gaps)
-- [ ] `.planning/ROADMAP.md` exists with requirement mappings and success criteria
-- [ ] `.planning/STATE.md` exists (project memory initialized)
+- [ ] Success criteria derived for each phase (2-5 observable behaviors)
+- [ ] Success criteria cross-checked against requirements (no gaps)
+- [ ] `$SPEC_DIR/ROADMAP.md` exists with YAML frontmatter
+- [ ] `$SPEC_DIR/STATE.md` exists (initialized)
 - [ ] REQUIREMENTS.md traceability section updated
-- [ ] Phases defined with clear names (count derived from requirements, not imposed)
-- [ ] **Research flags assigned** (Likely/Unlikely for each phase)
-- [ ] **Research topics listed** for Likely phases
-- [ ] Phase directories created
-- [ ] Dependencies noted if any
-- [ ] Status tracking in place
+- [ ] Phases defined with clear names
+- [ ] Research flags assigned (Likely/Unlikely for each phase)
+- [ ] Phase directories created in `$SPEC_DIR/planning/plans/`
+- [ ] Git commit created
+- [ ] Next steps offered
 </success_criteria>
-```
+````
