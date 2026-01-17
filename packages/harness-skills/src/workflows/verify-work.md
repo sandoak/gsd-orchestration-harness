@@ -138,6 +138,31 @@ APP_BASE_URL={DEV_SERVER_URL}
 <step name="configure_auth_bypass">
 **CRITICAL: Set up authentication bypass BEFORE testing protected routes**
 
+⚠️ **STOP - DO NOT TRY TO LOG IN NORMALLY** ⚠️
+
+If you see an "Unauthorized", "Login", or "Sign In" page:
+
+1. **DO NOT** look up admin credentials
+2. **DO NOT** try to find admin emails in the database
+3. **DO NOT** click login buttons or fill in forms
+4. **INSTEAD** → Set the bypass cookie with ONE LINE:
+
+```typescript
+mcp__playwright__browser_evaluate({
+  function: "() => { document.cookie = 'dev-admin-bypass=true; path=/'; return document.cookie; }",
+});
+```
+
+Then refresh:
+
+```typescript
+mcp__playwright__browser_navigate({ url: 'http://localhost:3001' });
+```
+
+**This is the ONLY way to authenticate for testing.** OAuth/magic link logins are impossible to automate. The bypass cookie is the designed solution.
+
+---
+
 This step detects and configures auth bypass mechanisms so Playwright can access protected areas without real OAuth/magic link login.
 
 **1. Detect bypass patterns in codebase:**
@@ -491,29 +516,34 @@ const snapshot = mcp__playwright__browser_snapshot({});
 if (
   snapshot.includes('login') ||
   snapshot.includes('unauthorized') ||
-  snapshot.includes('sign in')
+  snapshot.includes('sign in') ||
+  snapshot.includes('Sign Out') // Unauthorized page often has sign out button
 ) {
-  // AUTH WALL DETECTED - Apply bypass before giving up
-  console.log('Auth wall detected, applying bypass...');
+  // ⚠️ AUTH WALL DETECTED ⚠️
+  // DO NOT try to log in. DO NOT look up credentials. DO NOT click login forms.
+  // ONLY use the bypass cookie:
 
-  // Try cookie bypass first
   mcp__playwright__browser_evaluate({
     function:
       "() => { document.cookie = 'dev-admin-bypass=true; path=/'; return document.cookie; }",
   });
 
-  // Retry navigation
+  // Refresh to apply bypass
   mcp__playwright__browser_navigate({ url: '{test.url}' });
   const retrySnapshot = mcp__playwright__browser_snapshot({});
 
-  // If still auth wall, try header bypass
+  // Verify bypass worked - should NOT see login/unauthorized anymore
   if (retrySnapshot.includes('login') || retrySnapshot.includes('unauthorized')) {
-    // Header bypass requires PLAYWRIGHT_TEST_SECRET from env
-    // See configure_auth_bypass step for setup
+    // Try web bypass for non-admin apps
+    mcp__playwright__browser_evaluate({
+      function:
+        "() => { document.cookie = 'dev-web-bypass=true; path=/'; return document.cookie; }",
+    });
+    mcp__playwright__browser_navigate({ url: '{test.url}' });
   }
 
-  // ONLY after ALL bypass attempts fail, consider this test blocked by auth
-  // Record as ERROR with auth_wall reason, NOT as "needs code review"
+  // If STILL blocked after both bypass attempts, record as auth_wall error
+  // DO NOT fall back to code review. DO NOT try to find credentials.
 }
 
 // 4. Perform actions (click, type, etc.)
