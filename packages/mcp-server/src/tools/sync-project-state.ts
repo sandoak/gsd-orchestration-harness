@@ -352,6 +352,7 @@ interface AuditStatus {
 /**
  * Check AUDIT.md status in the spec directory.
  * This is the programmatic gate for spec completion.
+ * Reads the frontmatter `status` field to determine completion state.
  */
 async function checkAuditStatus(specDir: string): Promise<AuditStatus> {
   const auditPath = join(specDir, 'AUDIT.md');
@@ -360,27 +361,43 @@ async function checkAuditStatus(specDir: string): Promise<AuditStatus> {
     await access(auditPath, constants.R_OK);
     const content = await readFile(auditPath, 'utf-8');
 
-    // Check for 100% adherence indicators
-    const hasFullAdherence =
-      content.includes('100% adherence') ||
-      content.includes('ADHERENCE_100%') ||
-      content.includes('100% Adherence') ||
-      content.includes('Adherence: 100%');
+    // Parse frontmatter status field
+    // Format: status: pending | in_progress | complete | gaps_found
+    const statusMatch = content.match(/^status:\s*(pending|in_progress|complete|gaps_found)/m);
+    const status = statusMatch?.[1] || 'pending';
 
-    if (hasFullAdherence) {
+    // Parse adherence percentage if available
+    const adherenceMatch = content.match(/adherence_percent:\s*(\d+)/);
+    const adherencePercent = adherenceMatch?.[1] ? parseInt(adherenceMatch[1], 10) : 0;
+
+    if (status === 'complete') {
       return {
         auditExists: true,
         auditPassed: true,
         canDeclareComplete: true,
-        auditMessage: 'AUDIT.md exists with 100% adherence. Spec can be declared complete.',
+        auditMessage: `AUDIT.md status: complete (${adherencePercent}% adherence). Spec can be declared complete.`,
       };
-    } else {
+    } else if (status === 'gaps_found') {
       return {
         auditExists: true,
         auditPassed: false,
         canDeclareComplete: false,
-        auditMessage:
-          'AUDIT.md exists but shows gaps. Run /harness:audit-milestone to remediate gaps.',
+        auditMessage: `AUDIT.md status: gaps_found (${adherencePercent}% adherence). Run /harness:audit-milestone to remediate gaps.`,
+      };
+    } else if (status === 'in_progress') {
+      return {
+        auditExists: true,
+        auditPassed: false,
+        canDeclareComplete: false,
+        auditMessage: `AUDIT.md status: in_progress. Audit is running, wait for completion.`,
+      };
+    } else {
+      // status === 'pending' or unknown
+      return {
+        auditExists: true,
+        auditPassed: false,
+        canDeclareComplete: false,
+        auditMessage: `AUDIT.md status: pending. Run /harness:audit-milestone to verify spec against requirements.`,
       };
     }
   } catch {

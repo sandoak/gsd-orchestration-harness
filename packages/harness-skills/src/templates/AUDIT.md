@@ -1,10 +1,12 @@
 ---
-status: { { STATUS } }
+# Status: pending | in_progress | complete | gaps_found
+status: pending
 spec: { { SPEC_NAME } }
 milestone: { { MILESTONE_VERSION } }
-started: { { STARTED } }
-updated: { { UPDATED } }
-iteration: { { ITERATION } }
+created: { { CREATED_DATE } }
+updated: { { UPDATED_DATE } }
+iteration: 0
+adherence_percent: 0
 ---
 
 # Milestone Audit: {{SPEC_NAME}}
