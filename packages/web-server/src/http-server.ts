@@ -8,18 +8,27 @@ import fastifyStatic from '@fastify/static';
 import Fastify, { type FastifyInstance } from 'fastify';
 
 /**
- * Server version - update on significant changes.
+ * Base version - bump major/minor manually for breaking changes.
+ * Patch number is auto-calculated from git commit count.
  */
-const SERVER_VERSION = '0.2.0';
+const VERSION_BASE = '0.2';
 
 /**
- * Get git commit hash (cached at startup).
+ * Get version info from git (cached at startup).
  */
-const GIT_COMMIT = ((): string => {
+const GIT_INFO = ((): { commit: string; version: string } => {
   try {
-    return execSync('git rev-parse --short HEAD', { encoding: 'utf-8' }).trim();
+    const commit = execSync('git rev-parse --short HEAD', { encoding: 'utf-8' }).trim();
+    const commitCount = execSync('git rev-list --count HEAD', { encoding: 'utf-8' }).trim();
+    return {
+      commit,
+      version: `${VERSION_BASE}.${commitCount}`,
+    };
   } catch {
-    return 'unknown';
+    return {
+      commit: 'unknown',
+      version: `${VERSION_BASE}.0`,
+    };
   }
 })();
 
@@ -137,8 +146,8 @@ export class FastifyServer {
     this.app.get('/health', async () => {
       return {
         status: 'ok',
-        version: SERVER_VERSION,
-        commit: GIT_COMMIT,
+        version: GIT_INFO.version,
+        commit: GIT_INFO.commit,
         started: BUILD_TIME,
       };
     });
