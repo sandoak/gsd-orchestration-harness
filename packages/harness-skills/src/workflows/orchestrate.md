@@ -503,6 +503,31 @@ Before orchestrating, ensure context:
 
 <process>
 
+**🛑🛑🛑 MANDATORY FIRST ACTION - DO THIS BEFORE ANYTHING ELSE 🛑🛑🛑**
+
+**STOP. Before you analyze status, draw conclusions, or do ANYTHING:**
+
+```bash
+# EXECUTE THIS COMMAND FIRST - NO EXCEPTIONS
+ls -la $SPEC_DIR/AUDIT.md 2>/dev/null || echo "NO_AUDIT_FILE"
+```
+
+**If "NO_AUDIT_FILE" or file not found:**
+
+- The spec is NOT complete, regardless of what STATUS.md says
+- Do NOT say "the spec is complete"
+- Do NOT offer options to the user
+- IMMEDIATELY run: `harness_start_session(workingDir, "/harness:audit-milestone")`
+
+**If AUDIT.md exists, read it and check for "100% adherence":**
+
+- Only if AUDIT.md shows 100% adherence → spec is complete
+- If AUDIT.md shows gaps → continue orchestration with gap remediation
+
+**⚠️ YOUR FIRST RESPONSE MUST INCLUDE THE ls -la COMMAND OUTPUT ⚠️**
+
+---
+
 **⚠️ CRITICAL RULES - READ FIRST:**
 
 You are the ORCHESTRATOR, not the EXECUTOR. Your ONLY job is to:
