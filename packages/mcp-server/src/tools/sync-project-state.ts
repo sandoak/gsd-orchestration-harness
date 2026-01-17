@@ -1,5 +1,5 @@
-import { readdir, readFile, access, constants } from 'node:fs/promises';
-import { join } from 'node:path';
+import { readdir, readFile, writeFile, access, constants, mkdir } from 'node:fs/promises';
+import { join, dirname } from 'node:path';
 
 import type { OrchestrationStore, PlanStatus } from '@gsd/session-manager';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
@@ -37,25 +37,102 @@ function parsePlanFilename(filename: string): { phase: number; plan: number } | 
 }
 
 /**
- * Scan a project's .planning/phases/ directory and discover all plans.
+ * Find the planning directory - supports both legacy and spec-centric structures.
+ * Returns the base path and relative path prefix for plan paths.
+ */
+async function findPlanningDirectory(
+  projectPath: string
+): Promise<{ basePath: string; pathPrefix: string } | null> {
+  // Try spec-centric structure first: specs/*/planning/plans/
+  const specsDir = join(projectPath, 'specs');
+  try {
+    await access(specsDir, constants.R_OK);
+    const specDirs = await readdir(specsDir, { withFileTypes: true });
+    for (const specDir of specDirs) {
+      if (!specDir.isDirectory()) continue;
+      const plansDir = join(specsDir, specDir.name, 'planning', 'plans');
+      try {
+        await access(plansDir, constants.R_OK);
+        console.log(`[sync-project-state] Found spec-centric structure at ${plansDir}`);
+        return {
+          basePath: plansDir,
+          pathPrefix: `specs/${specDir.name}/planning/plans`,
+        };
+      } catch {
+        // Try next spec dir
+      }
+    }
+  } catch {
+    // No specs directory
+  }
+
+  // Fall back to legacy structure: .planning/phases/
+  const phasesDir = join(projectPath, '.planning', 'phases');
+  try {
+    await access(phasesDir, constants.R_OK);
+    console.log(`[sync-project-state] Found legacy structure at ${phasesDir}`);
+    return {
+      basePath: phasesDir,
+      pathPrefix: '.planning/phases',
+    };
+  } catch {
+    // No planning directory found
+  }
+
+  return null;
+}
+
+/**
+ * Find execution directory for spec-centric structure.
+ * SUMMARYs may be in a separate execution/phases/ directory.
+ */
+async function findExecutionDirectory(
+  projectPath: string,
+  specDirName: string
+): Promise<string | null> {
+  const executionDir = join(projectPath, 'specs', specDirName, 'execution', 'phases');
+  try {
+    await access(executionDir, constants.R_OK);
+    return executionDir;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Scan a project's planning directory and discover all plans.
+ * Supports both legacy (.planning/phases/) and spec-centric (specs/[spec]/planning/plans/) structures.
+ * For spec-centric, also checks execution/phases/ for SUMMARYs (split structure).
  * Also returns set of phases that have VERIFICATION.md files.
  */
 async function scanPlanningDirectory(
   projectPath: string
 ): Promise<{ plans: DiscoveredPlan[]; verifiedPhases: Set<number> }> {
-  const phasesDir = join(projectPath, '.planning', 'phases');
   const plans: DiscoveredPlan[] = [];
   const verifiedPhases = new Set<number>();
 
-  try {
-    await access(phasesDir, constants.R_OK);
-  } catch {
-    console.log(`[sync-project-state] No .planning/phases/ directory at ${phasesDir}`);
+  const planningDir = await findPlanningDirectory(projectPath);
+  if (!planningDir) {
+    console.log(`[sync-project-state] No planning directory found at ${projectPath}`);
     return { plans, verifiedPhases };
   }
 
-  // Read phase directories
-  const phaseDirs = await readdir(phasesDir, { withFileTypes: true });
+  const { basePath, pathPrefix } = planningDir;
+
+  // For spec-centric structure, find the execution directory
+  let executionBasePath: string | null = null;
+  if (pathPrefix.startsWith('specs/')) {
+    const specDirName = pathPrefix.split('/')[1]; // e.g., "SPC-001-taskflow-mvp"
+    if (specDirName) {
+      executionBasePath = await findExecutionDirectory(projectPath, specDirName);
+      if (executionBasePath) {
+        console.log(`[sync-project-state] Found execution directory at ${executionBasePath}`);
+      }
+    }
+  }
+
+  // Read phase directories from planning
+  const phaseDirs = await readdir(basePath, { withFileTypes: true });
 
   for (const phaseDir of phaseDirs) {
     if (!phaseDir.isDirectory()) continue;
@@ -64,11 +141,26 @@ async function scanPlanningDirectory(
     if (!phaseMatch || !phaseMatch[1]) continue;
 
     const phaseNumber = parseInt(phaseMatch[1], 10);
-    const phasePath = join(phasesDir, phaseDir.name);
+    const phasePath = join(basePath, phaseDir.name);
     const files = await readdir(phasePath);
 
-    // Check for VERIFICATION.md at phase level
-    if (files.includes('VERIFICATION.md')) {
+    // Also read execution phase directory if it exists
+    let executionFiles: string[] = [];
+    let executionPhasePath: string | null = null;
+    if (executionBasePath) {
+      executionPhasePath = join(executionBasePath, phaseDir.name);
+      try {
+        executionFiles = await readdir(executionPhasePath);
+        console.log(
+          `[sync-project-state] Found ${executionFiles.length} files in execution/${phaseDir.name}`
+        );
+      } catch {
+        // Execution phase directory doesn't exist yet
+      }
+    }
+
+    // Check for VERIFICATION.md at phase level (in planning OR execution)
+    if (files.includes('VERIFICATION.md') || executionFiles.includes('VERIFICATION.md')) {
       verifiedPhases.add(phaseNumber);
       console.log(`[sync-project-state] Phase ${phaseNumber} has VERIFICATION.md`);
     }
@@ -78,9 +170,13 @@ async function scanPlanningDirectory(
       const parsed = parsePlanFilename(file);
       if (!parsed) continue;
 
-      const planPath = join('.planning', 'phases', phaseDir.name, file);
+      const planPath = join(pathPrefix, phaseDir.name, file);
       const summaryFile = file.replace('-PLAN.md', '-SUMMARY.md');
-      const hasSummary = files.includes(summaryFile);
+
+      // Check for SUMMARY in planning dir OR execution dir
+      const hasSummaryInPlanning = files.includes(summaryFile);
+      const hasSummaryInExecution = executionFiles.includes(summaryFile);
+      const hasSummary = hasSummaryInPlanning || hasSummaryInExecution;
 
       // Determine status based on SUMMARY existence and content
       let status: PlanStatus = 'planned';
@@ -88,7 +184,9 @@ async function scanPlanningDirectory(
         status = 'executed';
         // Check if SUMMARY contains "## Status: VERIFIED"
         try {
-          const summaryPath = join(phasePath, summaryFile);
+          const summaryPath = hasSummaryInPlanning
+            ? join(phasePath, summaryFile)
+            : join(executionPhasePath!, summaryFile);
           const summaryContent = await readFile(summaryPath, 'utf-8');
           if (summaryContent.includes('## Status: VERIFIED')) {
             status = 'verified';
@@ -123,7 +221,286 @@ async function scanPlanningDirectory(
 }
 
 /**
- * Read STATE.md to find current phase position.
+ * Information about a spec directory for state file management.
+ */
+interface SpecInfo {
+  specId: string;
+  specDir: string;
+  statePath: string;
+  projectName: string;
+  milestone: string;
+}
+
+/**
+ * Accumulated context from STATE.md that persists across syncs.
+ */
+interface AccumulatedContext {
+  decisions: string[];
+  deferred: string[];
+  blockers: string[];
+  lastSession: string | null;
+  stoppedAt: string | null;
+}
+
+/**
+ * Find spec info for state file management.
+ * Returns spec directory info for spec-centric structure, or null for legacy.
+ */
+async function findSpecInfo(projectPath: string): Promise<SpecInfo | null> {
+  const specsDir = join(projectPath, 'specs');
+  try {
+    await access(specsDir, constants.R_OK);
+    const specDirs = await readdir(specsDir, { withFileTypes: true });
+    for (const specDir of specDirs) {
+      if (!specDir.isDirectory()) continue;
+      const specPath = join(specsDir, specDir.name);
+      const roadmapPath = join(specPath, 'ROADMAP.md');
+      try {
+        await access(roadmapPath, constants.R_OK);
+        const roadmapContent = await readFile(roadmapPath, 'utf-8');
+
+        // Parse frontmatter for project name and milestone
+        const projectMatch = roadmapContent.match(/^project:\s*(.+)$/m);
+        const milestoneMatch = roadmapContent.match(/^milestone:\s*(.+)$/m);
+
+        return {
+          specId: specDir.name,
+          specDir: specPath,
+          statePath: join(specPath, 'STATE.md'),
+          projectName: projectMatch?.[1]?.trim() || 'unknown',
+          milestone: milestoneMatch?.[1]?.trim() || 'unknown',
+        };
+      } catch {
+        // Try next spec dir
+      }
+    }
+  } catch {
+    // No specs directory
+  }
+  return null;
+}
+
+/**
+ * Read accumulated context from existing STATE.md.
+ * This preserves decisions, deferred items, and blockers across syncs.
+ */
+async function readAccumulatedContext(statePath: string): Promise<AccumulatedContext> {
+  const defaults: AccumulatedContext = {
+    decisions: [],
+    deferred: [],
+    blockers: [],
+    lastSession: null,
+    stoppedAt: null,
+  };
+
+  try {
+    const content = await readFile(statePath, 'utf-8');
+
+    // Parse Key Decisions section
+    const decisionsMatch = content.match(/### Key Decisions\n([\s\S]*?)(?=\n###|\n---|\n## |$)/);
+    if (decisionsMatch?.[1]) {
+      const lines = decisionsMatch[1]
+        .trim()
+        .split('\n')
+        .filter((l) => l.startsWith('- '));
+      defaults.decisions = lines.map((l) => l.slice(2));
+    }
+
+    // Parse Deferred Issues section
+    const deferredMatch = content.match(/### Deferred Issues\n([\s\S]*?)(?=\n###|\n---|\n## |$)/);
+    if (deferredMatch?.[1]) {
+      const lines = deferredMatch[1]
+        .trim()
+        .split('\n')
+        .filter((l) => l.startsWith('- '));
+      defaults.deferred = lines.map((l) => l.slice(2));
+    }
+
+    // Parse Blockers section
+    const blockersMatch = content.match(/### Blockers\n([\s\S]*?)(?=\n###|\n---|\n## |$)/);
+    if (blockersMatch?.[1]) {
+      const lines = blockersMatch[1]
+        .trim()
+        .split('\n')
+        .filter((l) => l.startsWith('- '));
+      defaults.blockers = lines.map((l) => l.slice(2));
+    }
+
+    // Parse Session Continuity
+    const lastSessionMatch = content.match(/\| Last Session \| (.+?) \|/);
+    const stoppedAtMatch = content.match(/\| Stopped At \| (.+?) \|/);
+    defaults.lastSession = lastSessionMatch?.[1]?.trim() || null;
+    defaults.stoppedAt = stoppedAtMatch?.[1]?.trim() || null;
+  } catch {
+    // STATE.md doesn't exist, use defaults
+  }
+
+  return defaults;
+}
+
+/**
+ * Phase info for state file generation.
+ */
+interface PhaseInfo {
+  phaseNumber: number;
+  phaseName: string;
+  totalPlans: number;
+  executedPlans: number;
+  verified: boolean;
+}
+
+/**
+ * Write STATE.md with current state.
+ */
+async function writeStateFile(
+  statePath: string,
+  specInfo: SpecInfo,
+  phases: PhaseInfo[],
+  state: {
+    highestPlannedPhase: number;
+    highestExecutedPhase: number;
+    highestVerifiedPhase: number;
+    pendingVerifyPhase: number | null;
+    totalPlans: number;
+    completedPlans: number;
+  },
+  accumulated: AccumulatedContext
+): Promise<void> {
+  const now = new Date().toISOString();
+  const today = now.split('T')[0];
+
+  // Calculate current phase (first incomplete phase)
+  const currentPhase =
+    phases.find((p) => p.executedPlans < p.totalPlans)?.phaseNumber || state.highestExecutedPhase;
+  const currentPhaseInfo = phases.find((p) => p.phaseNumber === currentPhase);
+  const plansInCurrentPhase = currentPhaseInfo?.totalPlans || 0;
+  const executedInCurrentPhase = currentPhaseInfo?.executedPlans || 0;
+
+  // Calculate progress
+  const totalPhases = phases.length;
+  const completedPhases = phases.filter(
+    (p) => p.executedPlans === p.totalPlans && p.verified
+  ).length;
+  const progressPercent =
+    state.totalPlans > 0 ? Math.round((state.completedPlans / state.totalPlans) * 100) : 0;
+  const progressBarFilled = Math.round(progressPercent / 5);
+  const progressBar = '█'.repeat(progressBarFilled) + '░'.repeat(20 - progressBarFilled);
+
+  // Determine status
+  let status = 'Planning';
+  if (state.completedPlans === state.totalPlans && completedPhases === totalPhases) {
+    status = 'Complete';
+  } else if (state.completedPlans > 0) {
+    status = state.pendingVerifyPhase ? 'Pending Verification' : 'Executing';
+  }
+
+  // Build phase table
+  const phaseTable = phases
+    .map((p) => {
+      const verified = p.verified ? '✓' : p.executedPlans === p.totalPlans ? '⏳' : '-';
+      const execStatus =
+        p.executedPlans === p.totalPlans ? 'Complete' : `${p.executedPlans}/${p.totalPlans}`;
+      return `| ${p.phaseNumber} | ${p.phaseName} | ${p.totalPlans} | ${execStatus} | ${verified} |`;
+    })
+    .join('\n');
+
+  // Build decisions list
+  const decisionsText =
+    accumulated.decisions.length > 0
+      ? accumulated.decisions.map((d) => `- ${d}`).join('\n')
+      : '_None recorded_';
+
+  // Build deferred list
+  const deferredText =
+    accumulated.deferred.length > 0
+      ? accumulated.deferred.map((d) => `- ${d}`).join('\n')
+      : '_None_';
+
+  // Build blockers list
+  const blockersText =
+    accumulated.blockers.length > 0
+      ? accumulated.blockers.map((b) => `- ${b}`).join('\n')
+      : '_None_';
+
+  // Determine resume command
+  const resumeCommand = state.pendingVerifyPhase
+    ? `/harness:verify-work ${state.pendingVerifyPhase}`
+    : currentPhase <= totalPhases
+      ? `/harness:execute-phase ${currentPhase}`
+      : '/harness:orchestrate (complete)';
+
+  const content = `# Project State
+
+## Project Reference
+
+See: specs/${specInfo.specId}/SPEC.md
+**Spec ID:** ${specInfo.specId}
+**Project:** ${specInfo.projectName}
+**Milestone:** ${specInfo.milestone}
+
+## Current Position
+
+| Field | Value |
+|-------|-------|
+| Phase | ${currentPhase} of ${totalPhases} |
+| Plan | ${executedInCurrentPhase} of ${plansInCurrentPhase} |
+| Status | ${status} |
+| Last Activity | ${today} |
+
+Progress: [${progressBar}] ${progressPercent}%
+
+## Phase Summary
+
+| Phase | Name | Plans | Executed | Verified |
+|-------|------|-------|----------|----------|
+${phaseTable}
+
+## Verification Gate
+
+| Field | Value |
+|-------|-------|
+| Highest Executed Phase | ${state.highestExecutedPhase} |
+| Highest Verified Phase | ${state.highestVerifiedPhase} |
+| Pending Verification | ${state.pendingVerifyPhase ?? 'None'} |
+
+## Performance Metrics
+
+**Velocity:**
+- Total plans completed: ${state.completedPlans}
+- Total phases completed: ${completedPhases}
+
+## Session Continuity
+
+| Field | Value |
+|-------|-------|
+| Last Session | ${today} |
+| Stopped At | Phase ${currentPhase}, Plan ${executedInCurrentPhase + 1} |
+| Resume Command | \`${resumeCommand}\` |
+
+## Accumulated Context
+
+### Key Decisions
+${decisionsText}
+
+### Deferred Issues
+${deferredText}
+
+### Blockers
+${blockersText}
+
+---
+_State file maintained by harness. Updated after each sync._
+_Last sync: ${now}_
+`;
+
+  // Ensure directory exists
+  await mkdir(dirname(statePath), { recursive: true });
+  await writeFile(statePath, content, 'utf-8');
+  console.log(`[sync-project-state] Wrote STATE.md to ${statePath}`);
+}
+
+/**
+ * Read STATE.md to find current phase position (legacy support).
  */
 async function readStateFile(projectPath: string): Promise<{ currentPhase: number } | null> {
   const statePath = join(projectPath, '.planning', 'STATE.md');
@@ -268,6 +645,47 @@ export function registerSyncProjectStateTool(
       console.log(
         `[sync] pendingVerifyPhase=${newState.pendingVerifyPhase}, maxExecutePhase=${maxExecutePhase}`
       );
+
+      // Write STATE.md for spec-centric projects
+      const specInfo = await findSpecInfo(projectPath);
+      if (specInfo) {
+        // Read accumulated context (decisions, blockers, etc.) from existing STATE.md
+        const accumulated = await readAccumulatedContext(specInfo.statePath);
+
+        // Build phase info from phaseGroups
+        const phases: PhaseInfo[] = [];
+        for (const [phaseNum, phasePlans] of phaseGroups) {
+          // Try to get phase name from ROADMAP.md or use generic name
+          const phaseName = `Phase ${phaseNum}`; // Could be enhanced to read from ROADMAP
+          const executedPlans = phasePlans.filter(
+            (p) => p.status === 'executed' || p.status === 'verified'
+          ).length;
+          phases.push({
+            phaseNumber: phaseNum,
+            phaseName,
+            totalPlans: phasePlans.length,
+            executedPlans,
+            verified: verifiedPhases.has(phaseNum),
+          });
+        }
+        phases.sort((a, b) => a.phaseNumber - b.phaseNumber);
+
+        // Write STATE.md
+        await writeStateFile(
+          specInfo.statePath,
+          specInfo,
+          phases,
+          {
+            highestPlannedPhase: highestPlanned,
+            highestExecutedPhase: highestExecuted,
+            highestVerifiedPhase: highestVerified,
+            pendingVerifyPhase: newState.pendingVerifyPhase,
+            totalPlans: discoveredPlans.length,
+            completedPlans: executedCount,
+          },
+          accumulated
+        );
+      }
 
       return {
         content: [

@@ -1,5 +1,9 @@
 import { defineConfig, devices } from '@playwright/test';
 
+// Support port overrides via environment variables to avoid conflicts
+const API_PORT = process.env.API_PORT || '3001';
+const WEB_PORT = process.env.WEB_PORT || '3000';
+
 export default defineConfig({
   testDir: './e2e',
   fullyParallel: true,
@@ -8,7 +12,7 @@ export default defineConfig({
   workers: process.env.CI ? 1 : undefined,
   reporter: 'html',
   use: {
-    baseURL: 'http://localhost:3000',
+    baseURL: `http://localhost:${WEB_PORT}`,
     trace: 'on-first-retry',
   },
   projects: [
@@ -19,14 +23,14 @@ export default defineConfig({
   ],
   webServer: [
     {
-      command: 'pnpm --filter @taskflow/api dev',
-      url: 'http://localhost:3001/api/health',
+      command: `PORT=${API_PORT} pnpm --filter @taskflow/api dev`,
+      url: `http://localhost:${API_PORT}/api/health`,
       reuseExistingServer: !process.env.CI,
       cwd: '../..',
     },
     {
-      command: 'pnpm --filter @taskflow/web dev',
-      url: 'http://localhost:3000',
+      command: `VITE_API_URL=http://localhost:${API_PORT} PORT=${WEB_PORT} pnpm --filter @taskflow/web dev`,
+      url: `http://localhost:${WEB_PORT}`,
       reuseExistingServer: !process.env.CI,
       cwd: '../..',
     },
