@@ -200,13 +200,51 @@ Use this workflow when:
 <arguments>
 **Usage:**
 ```
-/harness:orchestrate                    # Run from current working directory
-/harness:orchestrate [project-path]     # Run from specified project path
+/harness:orchestrate                              # Normal orchestration
+/harness:orchestrate [project-path]               # Orchestrate specific project
+/harness:orchestrate [path] reverify all phases   # Re-verify ALL executed phases
+/harness:orchestrate [path] reverify phase 3      # Re-verify only phase 3
+/harness:orchestrate [path] reverify phases 2,3,4 # Re-verify specific phases
+```
+
+**Commands:**
+
+| Command                 | Description                                 |
+| ----------------------- | ------------------------------------------- |
+| `reverify all phases`   | Re-run verification for ALL executed phases |
+| `reverify phase N`      | Re-run verification for phase N only        |
+| `reverify phases N,M,O` | Re-run verification for phases N, M, and O  |
+
+**Examples:**
+
+```bash
+# Normal orchestration
+/harness:orchestrate /path/to/spec
+
+# Re-verify all phases (previous verification was code-only, not runtime)
+/harness:orchestrate /path/to/spec reverify all phases
+
+# Re-verify just phase 3 (App Integration)
+/harness:orchestrate /path/to/spec reverify phase 3
+
+# Re-verify phases 2, 3, and 4
+/harness:orchestrate /path/to/spec reverify phases 2,3,4
 ```
 
 **$ARGUMENTS handling:**
 
-If `$ARGUMENTS` is provided (non-empty):
+Parse arguments (natural language):
+
+```
+PROJECT_PATH = path argument (if provided) OR $(pwd)
+REVERIFY_PHASES = parse "reverify" command:
+  - "reverify all phases" → ALL executed phases
+  - "reverify phase 3" → [3]
+  - "reverify phases 2,3,4" → [2, 3, 4]
+  - not present → [] (no re-verification, normal flow)
+```
+
+If `$ARGUMENTS` is provided (non-empty, excluding flags):
 
 - Use `$ARGUMENTS` as the absolute project path
 - All file reads use this path: `$ARGUMENTS/.planning/ROADMAP.md`
@@ -222,10 +260,19 @@ If `$ARGUMENTS` is empty:
 **Store the resolved path:**
 
 ```
-PROJECT_PATH = $ARGUMENTS if provided, else $(pwd)
+PROJECT_PATH = first non-flag arg if provided, else $(pwd)
+REVERIFY_ALL = true if --reverify in args
 ```
 
 Use `$PROJECT_PATH` throughout the workflow for consistency.
+
+**If REVERIFY_ALL is true:**
+
+1. Clear verification status for all executed phases
+2. Schedule verification for ALL phases that have SUMMARY.md files
+3. Verification will use proper runtime testing (Playwright, API, database)
+
+This is useful when previous verification was done incorrectly (e.g., code inspection instead of actual testing).
 </arguments>
 
 <prerequisites>
@@ -456,6 +503,71 @@ Build work queues for each slot type.
 The `harness_list_sessions` response may show previous failed sessions - these are IRRELEVANT.
 What matters is: Are slots available? Start fresh sessions regardless of failure history.
 </step>
+
+<step name="handle_reverify_command">
+**If REVERIFY_PHASES is set, schedule re-verification:**
+
+```
+if REVERIFY_PHASES is not empty:
+    # Determine which phases to re-verify
+    if REVERIFY_PHASES == "all":
+        PHASES_TO_VERIFY = find ALL phases where SUMMARY.md exists
+    else:
+        PHASES_TO_VERIFY = REVERIFY_PHASES  # e.g., [3] or [2, 3, 4]
+
+    # Clear verification status for these phases
+    for phase in PHASES_TO_VERIFY:
+        harness_clear_phase_verification($PROJECT_PATH, phase)
+
+    # Build verification queue
+    VERIFICATION_QUEUE = []
+    for phase in PHASES_TO_VERIFY:
+        VERIFICATION_QUEUE.append("/harness:verify-work {phase}")
+
+    # Report what will be re-verified
+    print("""
+    ╔══════════════════════════════════════════════════════════════════════╗
+    ║  RE-VERIFICATION MODE                                                 ║
+    ╠══════════════════════════════════════════════════════════════════════╣
+    ║                                                                        ║
+    ║  Phases to re-verify: {list of phases}                                ║
+    ║                                                                        ║
+    ║  Verification will use RUNTIME TESTING:                               ║
+    ║    - Start dev server                                                 ║
+    ║    - Playwright for UI features                                        ║
+    ║    - curl for API endpoints                                            ║
+    ║    - Database queries for data layer                                   ║
+    ║                                                                        ║
+    ║  Code-only inspection is NOT acceptable for runtime features.         ║
+    ║                                                                        ║
+    ╚══════════════════════════════════════════════════════════════════════╝
+    """)
+
+    # Clear other queues - focus on verification only
+    PLANNING_QUEUE = []
+    EXECUTION_QUEUE = []
+    RESEARCH_QUEUE = []
+```
+
+**Why re-verification is needed:**
+
+Verification that only reads code does NOT verify the feature works. Runtime testing catches:
+
+- Build errors that weren't caught
+- Missing dependencies
+- Integration issues
+- UI rendering problems
+- Database connectivity issues
+- API response format problems
+
+Previous "yes everything looks good" responses based on code inspection are **invalid**.
+
+**After re-verification completes:**
+
+- Normal orchestration flow resumes
+- If all phases pass → proceed to audit/completion
+- If issues found → gaps are recorded, fix plans created
+  </step>
 
 <step name="build_work_queues">
 **Build queues by task type (any slot can run any task):**
@@ -1419,8 +1531,87 @@ The harness-debugger agent will:
 **NEVER offer "execute directly in this session" as an option. The user chose /harness:orchestrate specifically to use the harness.**
 </step>
 
+<step name="milestone_audit">
+**After all phases executed and verified, run milestone audit:**
+
+When all planned phases are complete:
+
+1. All phases have SUMMARY.md files
+2. All phases have passed verification
+3. No pending work in any queue
+
+**Trigger the audit:**
+
+```
+harness_start_session(workingDir, "/harness:audit-milestone")
+```
+
+**Handle audit results:**
+
+The audit session will return one of:
+
+- `ADHERENCE_100%` - All requirements satisfied, proceed to completion
+- `GAPS_FOUND` - New remediation phases created, continue orchestration
+- `MAX_ITERATIONS` - Audit loop limit reached, requires manual decision
+
+**If GAPS_FOUND:**
+
+1. Audit auto-created new phases (e.g., 4.1, 4.2) in ROADMAP.md
+2. Re-sync project state: `harness_sync_project_state(projectPath)`
+3. New phases appear in planning/execution queues
+4. Continue orchestration loop with new phases
+5. After new phases complete, audit runs again automatically
+
+**If ADHERENCE_100%:**
+
+1. All requirements verified as complete
+2. Proceed to completion step
+
+**If MAX_ITERATIONS:**
+
+1. Display remaining gaps from AUDIT.md
+2. Ask user: "Continue remediation? / Accept gaps? / Manual fix?"
+
+**Track audit state:**
+
+```
+orchestrator_state = {
+  ...existing fields...
+  audit_iteration: 0,           // Current audit loop count
+  max_audit_iterations: 5,      // Safety limit
+  last_adherence_score: null,   // From last audit
+}
+```
+
+**Audit loop visualization:**
+
+```
+Execute All Phases → Verify All Phases → AUDIT
+                                           ↓
+                              ┌─────────────────────────┐
+                              │ Adherence = 100%?       │
+                              └─────────────────────────┘
+                                    │           │
+                                   YES          NO
+                                    │           │
+                                    ↓           ↓
+                              [COMPLETE]   [Create remediation phases]
+                                                │
+                                                ↓
+                                    [Execute new phases]
+                                                │
+                                                ↓
+                                    [Verify new phases]
+                                                │
+                                                ↓
+                                           [AUDIT again]
+                                           (loop until 100% or max iterations)
+```
+
+</step>
+
 <step name="completion">
-When all work is complete:
+When audit passes (100% adherence) OR user accepts gaps:
 
 ```
 ╔══════════════════════════════════════════════════════════════════════╗
@@ -1430,14 +1621,21 @@ When all work is complete:
 ║  ✓ All phases planned                                                 ║
 ║  ✓ All plans executed                                                 ║
 ║  ✓ All work verified                                                  ║
+║  ✓ Milestone audit passed                                             ║
 ║                                                                        ║
 ║  Pipeline Summary:                                                     ║
 ║    Phases planned: [N]                                                ║
 ║    Plans executed: [N]                                                ║
 ║    Verifications passed: [N]                                          ║
 ║    Checkpoints handled: [N]                                           ║
+║    Audit iterations: [N]                                              ║
+║    Spec adherence: [X]%                                               ║
 ║                                                                        ║
-║  Project state updated in STATE.md                                    ║
+║  Artifacts:                                                            ║
+║    - STATE.md updated                                                  ║
+║    - AUDIT.md created                                                  ║
+║                                                                        ║
+║  Next: /harness:complete-milestone                                     ║
 ║                                                                        ║
 ╚══════════════════════════════════════════════════════════════════════╝
 ```

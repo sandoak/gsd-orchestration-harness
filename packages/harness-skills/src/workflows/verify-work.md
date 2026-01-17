@@ -1,18 +1,25 @@
 <purpose>
-Validate built features through conversational testing with persistent state. Creates UAT.md that tracks test progress, survives /clear, and feeds gaps into /harness:plan-phase --gaps.
+Validate built features through **runtime testing** with Playwright and actual API/database verification. Creates UAT.md that tracks test progress, survives /clear, and feeds gaps into /harness:plan-phase --gaps.
 
-User tests, Claude records. One test at a time. Plain text responses.
+Claude RUNS the tests. Claude REPORTS results. No manual testing required.
 </purpose>
 
 <philosophy>
-**Show expected, ask if reality matches.**
+**Actually test, don't just inspect code.**
 
-Claude presents what SHOULD happen. User confirms or describes what's different.
+Claude must:
 
-- "yes" / "y" / "next" / empty → pass
-- Anything else → logged as issue, severity inferred
+1. Start the dev server if not running
+2. Use Playwright MCP to navigate and interact with UI
+3. Use Bash to test APIs (curl) and check database
+4. Verify actual behavior matches expected behavior
+5. Report pass/fail based on REAL test results
 
-No Pass/Fail buttons. No severity questions. Just: "Here's what should happen. Does it?"
+**This is NOT code inspection.** Reading a file to check exports exist is NOT verification.
+Verification means: "I navigated to the page, clicked the button, and saw X happen."
+
+**When issues are found:** Report them in UAT.md. Do NOT attempt fixes in this workflow.
+Issues get fixed via /harness:plan-phase --gaps → /harness:execute-phase.
 </philosophy>
 
 <template>
@@ -51,6 +58,82 @@ Store these paths for use in subsequent steps:
 - `$PLANNING_BASE` - Base directory containing phase subdirectories
 - `$STATE_FILE` - Path to STATE.md
   </step>
+
+<step name="ensure_dev_server_running">
+**CRITICAL: Start the dev server before any testing**
+
+Check if dev server is already running:
+
+```bash
+# Check common dev server ports
+curl -s -o /dev/null -w "%{http_code}" http://localhost:3000 2>/dev/null || echo "not running"
+curl -s -o /dev/null -w "%{http_code}" http://localhost:5173 2>/dev/null || echo "not running"
+```
+
+**If NOT running:**
+
+1. Find the start command from package.json:
+
+```bash
+cat package.json | grep -A5 '"scripts"' | grep -E '"dev"|"start"'
+```
+
+2. Start the dev server in background:
+
+```bash
+# Start in background, capture output
+nohup npm run dev > /tmp/dev-server.log 2>&1 &
+DEV_SERVER_PID=$!
+echo "Started dev server with PID: $DEV_SERVER_PID"
+
+# Wait for server to be ready (max 30 seconds)
+for i in {1..30}; do
+  if curl -s -o /dev/null -w "%{http_code}" http://localhost:3000 2>/dev/null | grep -q "200\|304"; then
+    echo "Dev server ready on port 3000"
+    break
+  fi
+  sleep 1
+done
+```
+
+3. Store server info:
+
+```
+DEV_SERVER_URL=http://localhost:3000  # or detected port
+DEV_SERVER_PID={pid}
+```
+
+**If ALREADY running:**
+
+```
+DEV_SERVER_URL=http://localhost:3000  # detected from curl
+DEV_SERVER_PID=existing
+```
+
+**IMPORTANT:** Tests CANNOT proceed without a running dev server for UI testing.
+</step>
+
+<step name="initialize_playwright">
+**Prepare Playwright for UI testing:**
+
+```typescript
+// Navigate to the app root to verify connection
+mcp__playwright__browser_navigate({ url: DEV_SERVER_URL });
+
+// Take initial snapshot to confirm app is accessible
+mcp__playwright__browser_snapshot({});
+```
+
+If navigation fails → Dev server issue, abort with error.
+
+**Store browser state:**
+
+```
+PLAYWRIGHT_READY=true
+APP_BASE_URL={DEV_SERVER_URL}
+```
+
+</step>
 
 <step name="check_active_session">
 **First: Check for active UAT sessions**
@@ -116,27 +199,114 @@ Read each SUMMARY.md to extract testable deliverables.
 </step>
 
 <step name="extract_tests">
-**Extract testable deliverables from SUMMARY.md:**
+**Extract testable deliverables from SUMMARY.md and create executable test plans:**
 
-Parse for:
+Parse SUMMARY.md for:
 
 1. **Accomplishments** - Features/functionality added
 2. **User-facing changes** - UI, workflows, interactions
+3. **API endpoints** - New or modified endpoints
+4. **Database changes** - Tables, functions, triggers
 
-Focus on USER-OBSERVABLE outcomes, not implementation details.
+**For EACH deliverable, create an EXECUTABLE test:**
 
-For each deliverable, create a test:
+| Test Type      | How to Test                                      |
+| -------------- | ------------------------------------------------ |
+| UI Feature     | Playwright: navigate, click, verify element/text |
+| API Endpoint   | curl: call endpoint, verify response             |
+| Database       | SQL query via supabase CLI or curl to API        |
+| Error Handling | Trigger error condition, verify behavior         |
 
-- name: Brief test name
-- expected: What the user should see/experience (specific, observable)
+**Example test definitions:**
 
-Examples:
+```yaml
+- name: 'Error logging form submission'
+  type: ui
+  steps:
+    - navigate: '/admin/errors'
+    - action: "click button with text 'Test Error'"
+    - verify: "toast appears with 'Error logged successfully'"
+  expected: 'Error is logged and confirmation shown'
 
-- Accomplishment: "Added comment threading with infinite nesting"
-  → Test: "Reply to a Comment"
-  → Expected: "Clicking Reply opens inline composer below comment. Submitting shows reply nested under parent with visual indentation."
+- name: 'Error list API returns data'
+  type: api
+  steps:
+    - curl: 'GET /api/errors?limit=10'
+    - verify: "status 200, body contains 'errors' array"
+  expected: 'API returns paginated error list'
 
-Skip internal/non-observable items (refactors, type changes, etc.).
+- name: 'log_error RPC function works'
+  type: database
+  steps:
+    - call: 'supabase rpc log_error with test data'
+    - verify: 'returns error_group_id UUID'
+  expected: 'RPC creates error record and returns ID'
+```
+
+**IMPORTANT:** Each test must be EXECUTABLE, not just descriptive.
+
+**Test type hierarchy (prefer higher):**
+
+1. **Runtime UI test** (Playwright) - BEST for user-facing features
+2. **Runtime API test** (curl) - BEST for endpoints
+3. **Runtime DB test** (query) - BEST for data layer
+4. **Code review** - LAST RESORT for non-observable changes only
+
+**Code review is ONLY acceptable for:**
+
+- Pure internal refactors (no behavior change)
+- Type definition changes
+- Configuration/build changes
+- Documentation updates
+
+If a feature CAN be tested at runtime, it MUST be tested at runtime.
+</step>
+
+<step name="create_test_scripts">
+**If tests require scripts, create them:**
+
+For complex test scenarios, create executable test scripts:
+
+```bash
+# Create test directory if needed
+mkdir -p "$SPEC_DIR/execution/tests"
+```
+
+**For Playwright tests, create test file:**
+
+```typescript
+// $SPEC_DIR/execution/tests/phase-{N}-uat.spec.ts
+import { test, expect } from '@playwright/test';
+
+test.describe('Phase {N} UAT', () => {
+  test('{test name}', async ({ page }) => {
+    await page.goto('{url}');
+    await page.click('{selector}');
+    await expect(page.locator('{selector}')).toBeVisible();
+  });
+});
+```
+
+**For API tests, create test script:**
+
+```bash
+#!/bin/bash
+# $SPEC_DIR/execution/tests/phase-{N}-api-tests.sh
+
+echo "Testing: {endpoint name}"
+RESPONSE=$(curl -s -w "\n%{http_code}" {endpoint})
+STATUS=$(echo "$RESPONSE" | tail -1)
+BODY=$(echo "$RESPONSE" | head -n -1)
+
+if [ "$STATUS" = "200" ] && echo "$BODY" | grep -q "{expected}"; then
+  echo "✓ PASS: {test name}"
+else
+  echo "✗ FAIL: {test name} - Status: $STATUS"
+  exit 1
+fi
+```
+
+**Test scripts are committed** so they can be re-run later.
 </step>
 
 <step name="create_uat_file">
@@ -201,92 +371,165 @@ Write to `$PHASE_DIR/{phase}-UAT.md`
 Proceed to `present_test`.
 </step>
 
-<step name="present_test">
-**Present current test to user:**
+<step name="execute_test">
+**EXECUTE the test - do not ask the user to test manually:**
 
-Read Current Test section from UAT file.
+Read Current Test from UAT file and EXECUTE it based on type:
 
-Display:
+**For UI tests (type: ui):**
+
+```typescript
+// 1. Navigate to the page
+mcp__playwright__browser_navigate({ url: '{test.url}' });
+
+// 2. Take snapshot to see current state
+const snapshot = mcp__playwright__browser_snapshot({});
+
+// 3. Perform actions (click, type, etc.)
+mcp__playwright__browser_click({ element: '{description}', ref: '{ref from snapshot}' });
+
+// 4. Verify expected outcome
+const afterSnapshot = mcp__playwright__browser_snapshot({});
+// Check if expected element/text is present
+```
+
+**For API tests (type: api):**
+
+```bash
+# Call the endpoint
+RESPONSE=$(curl -s -w "\n%{http_code}" -X {METHOD} "{API_URL}{endpoint}" \
+  -H "Content-Type: application/json" \
+  -d '{request_body}')
+
+STATUS=$(echo "$RESPONSE" | tail -1)
+BODY=$(echo "$RESPONSE" | head -n -1)
+
+# Verify response
+echo "Status: $STATUS"
+echo "Body: $BODY"
+# Check if status and body match expected
+```
+
+**For Database tests (type: database):**
+
+```bash
+# Query via Supabase CLI or API
+curl -s "{SUPABASE_URL}/rest/v1/rpc/{function}" \
+  -H "apikey: {ANON_KEY}" \
+  -H "Content-Type: application/json" \
+  -d '{params}'
+
+# Or direct SQL via supabase CLI
+supabase db query "SELECT * FROM {table} WHERE {condition}"
+```
+
+**For Code review tests (type: code_review) - LAST RESORT:**
+
+```bash
+# Only for non-runtime-testable items
+cat {file_path} | grep -A5 "{expected_pattern}"
+```
+
+**Determine result:**
+
+- If actual matches expected → PASS
+- If actual differs from expected → FAIL (record the difference)
+- If test cannot run (error) → ERROR (record the error)
+
+**Display execution result:**
 
 ```
 ## Test {number}: {name}
 
-**Expected:** {expected}
+**Type:** {ui|api|database|code_review}
+**Steps executed:**
+1. {step 1 result}
+2. {step 2 result}
+...
 
-Does this match what you see?
+**Expected:** {expected}
+**Actual:** {what actually happened}
+
+**Result:** {PASS|FAIL|ERROR}
+{If FAIL: difference description}
+{If ERROR: error message}
 ```
 
-Wait for user response (plain text, no AskUserQuestion).
+Proceed to `record_result`.
 </step>
 
-<step name="process_response">
-**Process user response and update file:**
+<step name="record_result">
+**Record the test execution result:**
 
-**If response indicates pass:**
-
-- Empty response, "yes", "y", "ok", "pass", "next", "approved", "✓"
+**If test PASSED:**
 
 Update Tests section:
-
-```
-### {N}. {name}
-expected: {expected}
-result: pass
-```
-
-**If response indicates skip:**
-
-- "skip", "can't test", "n/a"
-
-Update Tests section:
-
-```
-### {N}. {name}
-expected: {expected}
-result: skipped
-reason: [user's reason if provided]
-```
-
-**If response is anything else:**
-
-- Treat as issue description
-
-Infer severity from description:
-
-- Contains: crash, error, exception, fails, broken, unusable → blocker
-- Contains: doesn't work, wrong, missing, can't → major
-- Contains: slow, weird, off, minor, small → minor
-- Contains: color, font, spacing, alignment, visual → cosmetic
-- Default if unclear: major
-
-Update Tests section:
-
-```
-### {N}. {name}
-expected: {expected}
-result: issue
-reported: "{verbatim user response}"
-severity: {inferred}
-```
-
-Append to Gaps section (structured YAML for plan-phase --gaps):
 
 ```yaml
-- truth: '{expected behavior from test}'
-  status: failed
-  reason: 'User reported: {verbatim user response}'
-  severity: { inferred }
-  test: { N }
-  artifacts: [] # Filled by diagnosis
-  missing: [] # Filled by diagnosis
+### {N}. {name}
+type: { ui|api|database|code_review }
+expected: { expected }
+actual: { what was observed }
+result: pass
+executed_at: { ISO timestamp }
 ```
 
-**After any response:**
+**If test FAILED:**
+
+Infer severity from the failure:
+
+- UI not rendering, crash, exception → blocker
+- Wrong behavior, missing functionality → major
+- Slow, visual glitch, minor deviation → minor
+- Styling issue only → cosmetic
+
+Update Tests section:
+
+```yaml
+### {N}. {name}
+type: { ui|api|database|code_review }
+expected: { expected }
+actual: { what was observed }
+result: fail
+severity: { blocker|major|minor|cosmetic }
+difference: '{specific difference between expected and actual}'
+executed_at: { ISO timestamp }
+```
+
+Append to Gaps section:
+
+```yaml
+- truth: '{expected behavior}'
+  status: failed
+  actual: '{what actually happened}'
+  difference: '{specific difference}'
+  severity: { severity }
+  test: { N }
+  test_type: { ui|api|database }
+  artifacts:
+    - screenshot: { if UI test failed, path to screenshot }
+    - response: { if API test failed, response body }
+```
+
+**If test ERROR (couldn't execute):**
+
+```yaml
+### {N}. {name}
+type: { ui|api|database|code_review }
+expected: { expected }
+result: error
+error: '{error message}'
+executed_at: { ISO timestamp }
+```
+
+Append to Gaps with error context.
+
+**After recording:**
 
 Update Summary counts.
 Update frontmatter.updated timestamp.
 
-If more tests remain → Update Current Test, go to `present_test`
+If more tests remain → Update Current Test, go to `execute_test`
 If no more tests → Go to `complete_session`
 </step>
 
@@ -461,13 +704,57 @@ Default to **major** if unclear. User can correct if needed.
 **Never ask "how severe is this?"** - just infer and move on.
 </severity_inference>
 
+<step name="cleanup">
+**Clean up after testing:**
+
+If dev server was started by this workflow:
+
+```bash
+# Kill the dev server we started
+if [ "$DEV_SERVER_PID" != "existing" ]; then
+  kill $DEV_SERVER_PID 2>/dev/null || true
+  echo "Stopped dev server (PID: $DEV_SERVER_PID)"
+fi
+```
+
+Close Playwright browser if open:
+
+```typescript
+mcp__playwright__browser_close({});
+```
+
+</step>
+
 <success_criteria>
 
-- [ ] UAT file created with all tests from SUMMARY.md
-- [ ] Tests presented one at a time with expected behavior
-- [ ] User responses processed as pass/issue/skip
-- [ ] Severity inferred from description (never asked)
-- [ ] Batched writes: on issue, every 5 passes, or completion
+**Runtime Testing (REQUIRED for testable features):**
+
+- [ ] Dev server started (or confirmed running)
+- [ ] Playwright initialized and connected
+- [ ] UI tests executed via Playwright (navigate, click, verify)
+- [ ] API tests executed via curl
+- [ ] Database tests executed via query/RPC
+
+**Recording:**
+
+- [ ] UAT file created with executable test definitions
+- [ ] Each test EXECUTED (not just described)
+- [ ] Results recorded with actual vs expected
+- [ ] Failures include specific difference and severity
+- [ ] Screenshots captured for UI failures
+
+**Completion:**
+
+- [ ] All tests executed
+- [ ] Summary stats updated
 - [ ] Committed on completion
-- [ ] Clear next steps based on results (plan-phase --gaps if issues)
+- [ ] Dev server cleaned up (if we started it)
+- [ ] Clear next steps (plan-phase --gaps if failures)
+
+**Code review is acceptable ONLY for:**
+
+- [ ] Pure refactors with no behavior change
+- [ ] Type-only changes
+- [ ] Build/config changes
+- [ ] Documentation
       </success_criteria>
