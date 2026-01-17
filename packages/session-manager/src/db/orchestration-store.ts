@@ -406,72 +406,31 @@ export class OrchestrationStore {
   canStartPlan(
     projectPath: string,
     phaseNumber: number,
-    planNumber: number = 1
+    _planNumber: number = 1
   ): { allowed: boolean; reason?: string; maxAllowedPlan?: string } {
+    // RELAXED PLANNING LIMIT:
+    // The orchestrator knows the dependency graph from ROADMAP.md and can make
+    // intelligent decisions about what to plan in parallel. We trust the orchestrator
+    // to not plan phases that have unmet dependencies.
+    //
+    // Only enforce a soft limit: don't plan more than 5 phases ahead of execution
+    // to prevent runaway planning that wastes resources.
+
     const state = this.getState(projectPath);
+    const basePhase = Math.max(state.highestExecutingPhase, state.highestExecutedPhase, 0);
 
-    // Case 1: Nothing executing AND nothing previously executed (truly fresh project)
-    // Allow first 3 plans (01-01, 01-02, 01-03 or 02-01)
-    if (state.highestExecutingPhase === 0 && state.highestExecutedPhase === 0) {
-      // Allow phase 1 plans 1-3, or phase 2 plan 1
-      if (phaseNumber === 1 && planNumber <= 3) {
-        return { allowed: true };
-      }
-      if (phaseNumber === 2 && planNumber === 1) {
-        return { allowed: true };
-      }
-      if (phaseNumber > 2 || (phaseNumber === 2 && planNumber > 1)) {
-        return {
-          allowed: false,
-          reason: `No execution started yet. Can only plan up to 02-01 initially. Requested: ${String(phaseNumber).padStart(2, '0')}-${String(planNumber).padStart(2, '0')}.`,
-          maxAllowedPlan: '02-01',
-        };
-      }
+    // Allow planning up to 5 phases ahead of wherever execution is
+    // This gives the orchestrator plenty of room to parallelize independent phases
+    const maxPhase = basePhase + 5;
+
+    if (phaseNumber <= maxPhase) {
       return { allowed: true };
     }
 
-    // Case 2: Nothing currently executing but phases were previously executed
-    // (e.g., new milestone starting, or resuming after pause)
-    // Allow planning up to N+2 phases ahead of highest executed phase
-    if (state.highestExecutingPhase === 0 && state.highestExecutedPhase > 0) {
-      const maxPhase = state.highestExecutedPhase + 2;
-      if (phaseNumber <= maxPhase) {
-        return { allowed: true };
-      }
-      return {
-        allowed: false,
-        reason: `Planning limited to Phase ${maxPhase}. Highest executed: Phase ${state.highestExecutedPhase}. Requested: Phase ${phaseNumber}.`,
-        maxAllowedPlan: `${String(maxPhase).padStart(2, '0')}-01`,
-      };
-    }
-
-    const execPhase = state.highestExecutingPhase;
-    const execPlan = state.highestExecutingPlan;
-
-    // Same phase: allow up to execPlan + 2
-    if (phaseNumber === execPhase) {
-      const maxPlan = execPlan + 2;
-      if (planNumber <= maxPlan) {
-        return { allowed: true };
-      }
-      return {
-        allowed: false,
-        reason: `Can only plan 2 plans ahead. Currently executing: ${String(execPhase).padStart(2, '0')}-${String(execPlan).padStart(2, '0')}. Max allowed: ${String(execPhase).padStart(2, '0')}-${String(maxPlan).padStart(2, '0')}. Requested: ${String(phaseNumber).padStart(2, '0')}-${String(planNumber).padStart(2, '0')}.`,
-        maxAllowedPlan: `${String(execPhase).padStart(2, '0')}-${String(maxPlan).padStart(2, '0')}`,
-      };
-    }
-
-    // Next phase (N+1): always allowed while executing phase N
-    // This keeps the planning pipeline fed without getting too far ahead
-    if (phaseNumber === execPhase + 1) {
-      return { allowed: true };
-    }
-
-    // Phase too far ahead
     return {
       allowed: false,
-      reason: `Phase ${phaseNumber} is too far ahead. Currently executing Phase ${execPhase}. Must complete Phase ${execPhase} before planning Phase ${phaseNumber}.`,
-      maxAllowedPlan: `${String(execPhase).padStart(2, '0')}-${String(execPlan + 2).padStart(2, '0')}`,
+      reason: `Phase ${phaseNumber} is more than 5 phases ahead of execution (currently at Phase ${basePhase}). This limit prevents runaway planning.`,
+      maxAllowedPlan: `${String(maxPhase).padStart(2, '0')}-01`,
     };
   }
 

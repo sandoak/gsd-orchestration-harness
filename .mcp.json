@@ -1,6 +1,6 @@
 {
   "mcpServers": {
-    "gsd-harness": {
+    "orchestration-harness": {
       "type": "http",
       "url": "http://localhost:3333/mcp"
     },
