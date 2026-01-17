@@ -25,15 +25,82 @@ interface DiscoveredPlan {
 
 /**
  * Parse phase and plan numbers from a PLAN.md filename.
- * E.g., "03-02-PLAN.md" → { phase: 3, plan: 2 }
+ * Supports multiple naming conventions:
+ * - "03-02-PLAN.md" → { phase: 3, plan: 2 }
+ * - "01-PLAN.md" → { phase: 1, plan: 1 }
+ * - "01-error-logger-PLAN.md" → { phase: 1, plan: 1 }
+ * - "03-001-app-integration-PLAN.md" → { phase: 3, plan: 1 }
+ * - "02-01-feature-name-PLAN.md" → { phase: 2, plan: 1 }
+ *
+ * @param filename - The PLAN.md filename
+ * @param phaseFromDir - Optional phase number from parent directory name
  */
-function parsePlanFilename(filename: string): { phase: number; plan: number } | null {
-  const match = filename.match(/^(\d{2})-(\d{2})-PLAN\.md$/);
-  if (!match || !match[1] || !match[2]) return null;
-  return {
-    phase: parseInt(match[1], 10),
-    plan: parseInt(match[2], 10),
-  };
+function parsePlanFilename(
+  filename: string,
+  phaseFromDir?: number
+): { phase: number; plan: number } | null {
+  // Must end with -PLAN.md
+  if (!filename.endsWith('-PLAN.md')) {
+    console.log(`[sync] Skipping ${filename}: doesn't end with -PLAN.md`);
+    return null;
+  }
+
+  // Try strict format first: XX-YY-PLAN.md
+  const strictMatch = filename.match(/^(\d{2})-(\d{2})-PLAN\.md$/);
+  if (strictMatch?.[1] && strictMatch[2]) {
+    console.log(
+      `[sync] Parsed ${filename}: strict format → phase=${strictMatch[1]}, plan=${strictMatch[2]}`
+    );
+    return {
+      phase: parseInt(strictMatch[1], 10),
+      plan: parseInt(strictMatch[2], 10),
+    };
+  }
+
+  // Try: XX-YY-name-PLAN.md (phase-plan-description)
+  const namedMatch = filename.match(/^(\d{1,2})-(\d{1,3})-[a-zA-Z].*-PLAN\.md$/);
+  if (namedMatch?.[1] && namedMatch[2]) {
+    console.log(
+      `[sync] Parsed ${filename}: named format → phase=${namedMatch[1]}, plan=${namedMatch[2]}`
+    );
+    return {
+      phase: parseInt(namedMatch[1], 10),
+      plan: parseInt(namedMatch[2], 10),
+    };
+  }
+
+  // Try: XX-PLAN.md (single number, assume plan 1)
+  const singleMatch = filename.match(/^(\d{1,2})-PLAN\.md$/);
+  if (singleMatch?.[1]) {
+    const num = parseInt(singleMatch[1], 10);
+    // If we have phase from directory, this is the plan number
+    if (phaseFromDir !== undefined) {
+      console.log(
+        `[sync] Parsed ${filename}: single number with dir context → phase=${phaseFromDir}, plan=${num}`
+      );
+      return { phase: phaseFromDir, plan: num };
+    }
+    // Otherwise assume phase number with plan 1
+    console.log(`[sync] Parsed ${filename}: single number → phase=${num}, plan=1`);
+    return { phase: num, plan: 1 };
+  }
+
+  // Try: XX-name-PLAN.md (number-description, assume plan 1)
+  const numNameMatch = filename.match(/^(\d{1,2})-[a-zA-Z].*-PLAN\.md$/);
+  if (numNameMatch?.[1]) {
+    const num = parseInt(numNameMatch[1], 10);
+    if (phaseFromDir !== undefined) {
+      console.log(
+        `[sync] Parsed ${filename}: num-name with dir context → phase=${phaseFromDir}, plan=${num}`
+      );
+      return { phase: phaseFromDir, plan: num };
+    }
+    console.log(`[sync] Parsed ${filename}: num-name format → phase=${num}, plan=1`);
+    return { phase: num, plan: 1 };
+  }
+
+  console.log(`[sync] Could not parse ${filename}: no pattern matched`);
+  return null;
 }
 
 /**
@@ -166,8 +233,11 @@ async function scanPlanningDirectory(
     }
 
     // Find PLAN.md files
+    console.log(
+      `[sync] Scanning phase dir ${phaseDir.name} (phase ${phaseNumber}): ${files.length} files`
+    );
     for (const file of files) {
-      const parsed = parsePlanFilename(file);
+      const parsed = parsePlanFilename(file, phaseNumber);
       if (!parsed) continue;
 
       const planPath = join(pathPrefix, phaseDir.name, file);
@@ -216,6 +286,20 @@ async function scanPlanningDirectory(
     if (a.phaseNumber !== b.phaseNumber) return a.phaseNumber - b.phaseNumber;
     return a.planNumber - b.planNumber;
   });
+
+  // Summary log
+  console.log(`[sync] === SCAN SUMMARY ===`);
+  console.log(
+    `[sync] Found ${plans.length} plans across ${phaseDirs.filter((d) => d.isDirectory()).length} phase directories`
+  );
+  for (const plan of plans) {
+    console.log(
+      `[sync]   - Phase ${plan.phaseNumber}, Plan ${plan.planNumber}: ${plan.status} (${plan.planPath})`
+    );
+  }
+  if (plans.length === 0) {
+    console.log(`[sync] WARNING: No plans found! Check file naming conventions.`);
+  }
 
   return { plans, verifiedPhases };
 }
