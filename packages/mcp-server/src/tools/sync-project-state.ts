@@ -867,48 +867,58 @@ export function registerSyncProjectStateTool(
         newState.pendingVerifyPhase === null && highestVerified >= highestPlanned;
       const workLooksComplete = allPlansExecuted && allPhasesVerified;
 
+      // Generate a prominent warning if audit is missing but work looks complete
+      const auditWarning =
+        workLooksComplete && !auditStatus.canDeclareComplete
+          ? `\n\n⚠️⚠️⚠️ STOP! AUDIT.md MISSING! ⚠️⚠️⚠️\n\n${auditStatus.auditMessage}\n\nYou CANNOT declare this spec complete.\nYou MUST run: harness_start_session(workingDir, "/harness:audit-milestone")\n\n⚠️⚠️⚠️ DO NOT IGNORE THIS ⚠️⚠️⚠️\n\n`
+          : '';
+
       return {
         content: [
           {
             type: 'text',
-            text: JSON.stringify({
-              success: true,
-              projectPath,
-              // ⚠️ COMPLETION GATE - ORCHESTRATOR MUST CHECK THIS
-              completionGate: {
-                workLooksComplete,
-                auditExists: auditStatus.auditExists,
-                auditPassed: auditStatus.auditPassed,
-                canDeclareComplete: auditStatus.canDeclareComplete,
-                message: auditStatus.auditMessage,
-                // This is the key flag - if false, orchestrator CANNOT stop
-                canStopOrchestration: auditStatus.canDeclareComplete,
-              },
-              sync: {
-                totalPlans: discoveredPlans.length,
-                executedPlans: executedCount,
-                pendingPlans: plannedCount,
-              },
-              state: {
-                highestPlannedPhase: newState.highestPlannedPhase,
-                highestExecutedPhase: newState.highestExecutedPhase,
-                pendingVerifyPhase: newState.pendingVerifyPhase,
-              },
-              limits: {
-                maxPlanPhase,
-                maxExecutePhase, // null means no limit, number means max allowed phase
-                pendingVerifyBlocks:
-                  newState.pendingVerifyPhase !== null
-                    ? `Phase ${newState.pendingVerifyPhase} pending verify. Can execute up to Phase ${newState.pendingVerifyPhase + 1}.`
-                    : null,
-              },
-              plans: discoveredPlans.map((p) => ({
-                path: p.planPath,
-                phase: p.phaseNumber,
-                plan: p.planNumber,
-                status: p.status,
-              })),
-            }),
+            text:
+              auditWarning +
+              JSON.stringify({
+                success: true,
+                projectPath,
+                // ⚠️ COMPLETION GATE - ORCHESTRATOR MUST CHECK THIS FIRST
+                '🛑_COMPLETION_GATE_CHECK_THIS_FIRST': {
+                  canStopOrchestration: auditStatus.canDeclareComplete,
+                  workLooksComplete,
+                  auditExists: auditStatus.auditExists,
+                  auditPassed: auditStatus.auditPassed,
+                  canDeclareComplete: auditStatus.canDeclareComplete,
+                  message: auditStatus.auditMessage,
+                  action: auditStatus.canDeclareComplete
+                    ? 'AUDIT passed - spec can be declared complete'
+                    : 'MUST RUN: harness_start_session(workingDir, "/harness:audit-milestone")',
+                },
+                sync: {
+                  totalPlans: discoveredPlans.length,
+                  executedPlans: executedCount,
+                  pendingPlans: plannedCount,
+                },
+                state: {
+                  highestPlannedPhase: newState.highestPlannedPhase,
+                  highestExecutedPhase: newState.highestExecutedPhase,
+                  pendingVerifyPhase: newState.pendingVerifyPhase,
+                },
+                limits: {
+                  maxPlanPhase,
+                  maxExecutePhase, // null means no limit, number means max allowed phase
+                  pendingVerifyBlocks:
+                    newState.pendingVerifyPhase !== null
+                      ? `Phase ${newState.pendingVerifyPhase} pending verify. Can execute up to Phase ${newState.pendingVerifyPhase + 1}.`
+                      : null,
+                },
+                plans: discoveredPlans.map((p) => ({
+                  path: p.planPath,
+                  phase: p.phaseNumber,
+                  plan: p.planNumber,
+                  status: p.status,
+                })),
+              }),
           },
         ],
       };

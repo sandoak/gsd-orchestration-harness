@@ -498,8 +498,11 @@ Before orchestrating, ensure context:
 
 - ROADMAP.md: Know which phases exist and their status
 - STATE.md: Know current project position
+- **AUDIT.md: Check if spec completion audit exists (CRITICAL for completion gate)**
 - Harness MCP tools: harness\_\*\* tools must be available
-  </required_reading>
+
+**⚠️ If AUDIT.md does not exist and STATUS.md shows "complete", you CANNOT declare the spec complete!**
+</required_reading>
 
 <process>
 
