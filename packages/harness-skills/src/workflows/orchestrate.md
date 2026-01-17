@@ -1,10 +1,36 @@
 <!-- COMPACT-RESISTANT: These rules MUST survive context summarization -->
 
+<on_context_compaction>
+
+## 🔄 CONTEXT COMPACTION DETECTED - MANDATORY RE-READ
+
+**IMMEDIATELY after context compaction/summarization, you MUST:**
+
+```bash
+# Re-read orchestrator instructions (THIS IS MANDATORY)
+cat packages/harness-skills/src/workflows/orchestrate.md | head -200
+```
+
+**WHY:** Compaction summaries lose critical orchestration rules. Without re-reading:
+
+- You'll forget session lifecycle rules (end → start, not respond with commands)
+- You'll forget to use all 4 slots aggressively
+- You'll forget verification is mandatory
+- You'll stray from the orchestration pattern
+
+**SIGNS YOU'VE STRAYED (re-read if any):**
+
+- Using `harness_respond_checkpoint` with `/harness:` commands
+- Only using 1-2 slots when 4 are available
+- Skipping verification after execution
+- Doing work yourself instead of spawning sessions
+  </on_context_compaction>
+
 <critical_rules>
 
 ## ⚠️ ORCHESTRATOR CRITICAL RULES (Re-read if context compacted)
 
-**IF UNSURE, RE-READ THIS FILE:** `cat .harness/skills/workflows/orchestrate.md`
+**IF UNSURE, RE-READ THIS FILE:** `cat packages/harness-skills/src/workflows/orchestrate.md`
 
 ### SESSION LIFECYCLE (Most Common Mistake)
 
