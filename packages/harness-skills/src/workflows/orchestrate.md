@@ -26,6 +26,49 @@ cat packages/harness-skills/src/workflows/orchestrate.md | head -200
 - Doing work yourself instead of spawning sessions
   </on_context_compaction>
 
+<global_resources>
+
+## 📁 GLOBAL CREDENTIALS LOCATION (All Projects)
+
+**Server credentials and connection details are stored in:**
+
+```
+/mnt/dev-linux/projects/server-maintenance/docs/servers/
+```
+
+When you need:
+
+- Database connection strings (Supabase, PostgreSQL, etc.)
+- Admin login credentials
+- SSH keys or server access
+- API keys for external services
+
+**Look in that directory first.** Files are organized by server/service name.
+
+## 🔓 AUTHENTICATION BYPASS FOR TESTING
+
+**DO NOT try to log in normally via OAuth/magic link - it cannot be automated.**
+
+For admin app testing (`localhost:3001`):
+
+```typescript
+mcp__playwright__browser_evaluate({
+  function: "() => { document.cookie = 'dev-admin-bypass=true; path=/'; return document.cookie; }",
+});
+mcp__playwright__browser_navigate({ url: 'http://localhost:3001' });
+```
+
+For web app testing (`localhost:3000`):
+
+```typescript
+mcp__playwright__browser_evaluate({
+  function: "() => { document.cookie = 'dev-web-bypass=true; path=/'; return document.cookie; }",
+});
+```
+
+**This is the ONLY way to authenticate for automated testing.**
+</global_resources>
+
 <critical_rules>
 
 ## ⚠️ ORCHESTRATOR CRITICAL RULES (Re-read if context compacted)
