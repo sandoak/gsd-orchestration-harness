@@ -503,28 +503,38 @@ Before orchestrating, ensure context:
 
 <process>
 
-**🛑🛑🛑 MANDATORY FIRST ACTION - DO THIS BEFORE ANYTHING ELSE 🛑🛑🛑**
+**🛑🛑🛑 MANDATORY COMPLETION GATE - SYNC TELLS YOU IF YOU CAN STOP 🛑🛑🛑**
 
-**STOP. Before you analyze status, draw conclusions, or do ANYTHING:**
+**When you call `harness_sync_project_state`, the response includes a `completionGate` object:**
 
-```bash
-# EXECUTE THIS COMMAND FIRST - NO EXCEPTIONS
-ls -la $SPEC_DIR/AUDIT.md 2>/dev/null || echo "NO_AUDIT_FILE"
+```json
+{
+  "completionGate": {
+    "workLooksComplete": true/false,
+    "auditExists": true/false,
+    "auditPassed": true/false,
+    "canDeclareComplete": true/false,
+    "canStopOrchestration": true/false,  // ← THIS IS THE KEY FLAG
+    "message": "..." // Explains what to do
+  }
+}
 ```
 
-**If "NO_AUDIT_FILE" or file not found:**
+**YOU CANNOT STOP ORCHESTRATION UNLESS `canStopOrchestration: true`**
+
+**If `canStopOrchestration: false`:**
 
 - The spec is NOT complete, regardless of what STATUS.md says
 - Do NOT say "the spec is complete"
 - Do NOT offer options to the user
 - IMMEDIATELY run: `harness_start_session(workingDir, "/harness:audit-milestone")`
 
-**If AUDIT.md exists, read it and check for "100% adherence":**
+**If `canStopOrchestration: true`:**
 
-- Only if AUDIT.md shows 100% adherence → spec is complete
-- If AUDIT.md shows gaps → continue orchestration with gap remediation
+- AUDIT.md exists with 100% adherence
+- NOW you can declare spec complete and stop
 
-**⚠️ YOUR FIRST RESPONSE MUST INCLUDE THE ls -la COMMAND OUTPUT ⚠️**
+**The sync tool programmatically checks AUDIT.md - trust its response!**
 
 ---
 

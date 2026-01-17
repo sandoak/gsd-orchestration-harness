@@ -340,6 +340,61 @@ interface SpecInfo {
 }
 
 /**
+ * Audit status for spec completion gate.
+ */
+interface AuditStatus {
+  auditExists: boolean;
+  auditPassed: boolean;
+  canDeclareComplete: boolean;
+  auditMessage: string;
+}
+
+/**
+ * Check AUDIT.md status in the spec directory.
+ * This is the programmatic gate for spec completion.
+ */
+async function checkAuditStatus(specDir: string): Promise<AuditStatus> {
+  const auditPath = join(specDir, 'AUDIT.md');
+
+  try {
+    await access(auditPath, constants.R_OK);
+    const content = await readFile(auditPath, 'utf-8');
+
+    // Check for 100% adherence indicators
+    const hasFullAdherence =
+      content.includes('100% adherence') ||
+      content.includes('ADHERENCE_100%') ||
+      content.includes('100% Adherence') ||
+      content.includes('Adherence: 100%');
+
+    if (hasFullAdherence) {
+      return {
+        auditExists: true,
+        auditPassed: true,
+        canDeclareComplete: true,
+        auditMessage: 'AUDIT.md exists with 100% adherence. Spec can be declared complete.',
+      };
+    } else {
+      return {
+        auditExists: true,
+        auditPassed: false,
+        canDeclareComplete: false,
+        auditMessage:
+          'AUDIT.md exists but shows gaps. Run /harness:audit-milestone to remediate gaps.',
+      };
+    }
+  } catch {
+    return {
+      auditExists: false,
+      auditPassed: false,
+      canDeclareComplete: false,
+      auditMessage:
+        '⚠️ AUDIT.md MISSING - Cannot declare spec complete! Run /harness:audit-milestone FIRST.',
+    };
+  }
+}
+
+/**
  * Accumulated context from STATE.md that persists across syncs.
  */
 interface AccumulatedContext {
@@ -795,6 +850,23 @@ export function registerSyncProjectStateTool(
         );
       }
 
+      // Check AUDIT.md status - this is the programmatic gate for completion
+      const auditStatus = specInfo
+        ? await checkAuditStatus(specInfo.specDir)
+        : {
+            auditExists: false,
+            auditPassed: false,
+            canDeclareComplete: false,
+            auditMessage: 'No spec directory found to check AUDIT.md',
+          };
+
+      // Determine if all work appears done (all plans executed, all phases verified)
+      const allPlansExecuted =
+        executedCount === discoveredPlans.length && discoveredPlans.length > 0;
+      const allPhasesVerified =
+        newState.pendingVerifyPhase === null && highestVerified >= highestPlanned;
+      const workLooksComplete = allPlansExecuted && allPhasesVerified;
+
       return {
         content: [
           {
@@ -802,6 +874,16 @@ export function registerSyncProjectStateTool(
             text: JSON.stringify({
               success: true,
               projectPath,
+              // ⚠️ COMPLETION GATE - ORCHESTRATOR MUST CHECK THIS
+              completionGate: {
+                workLooksComplete,
+                auditExists: auditStatus.auditExists,
+                auditPassed: auditStatus.auditPassed,
+                canDeclareComplete: auditStatus.canDeclareComplete,
+                message: auditStatus.auditMessage,
+                // This is the key flag - if false, orchestrator CANNOT stop
+                canStopOrchestration: auditStatus.canDeclareComplete,
+              },
               sync: {
                 totalPlans: discoveredPlans.length,
                 executedPlans: executedCount,
