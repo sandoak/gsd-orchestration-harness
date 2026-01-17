@@ -104,13 +104,26 @@ function parsePlanFilename(
 }
 
 /**
- * Find the planning directory - supports both legacy and spec-centric structures.
+ * Find the planning directory - supports multiple structures.
  * Returns the base path and relative path prefix for plan paths.
  */
 async function findPlanningDirectory(
   projectPath: string
 ): Promise<{ basePath: string; pathPrefix: string } | null> {
-  // Try spec-centric structure first: specs/*/planning/plans/
+  // Try direct spec structure first: planning/plans/ (when projectPath IS the spec)
+  const directPlansDir = join(projectPath, 'planning', 'plans');
+  try {
+    await access(directPlansDir, constants.R_OK);
+    console.log(`[sync-project-state] Found direct spec structure at ${directPlansDir}`);
+    return {
+      basePath: directPlansDir,
+      pathPrefix: 'planning/plans',
+    };
+  } catch {
+    // Not a direct spec directory
+  }
+
+  // Try spec-centric structure: specs/*/planning/plans/
   const specsDir = join(projectPath, 'specs');
   try {
     await access(specsDir, constants.R_OK);
@@ -186,10 +199,21 @@ async function scanPlanningDirectory(
 
   const { basePath, pathPrefix } = planningDir;
 
-  // For spec-centric structure, find the execution directory
+  // Find execution directory (where SUMMARYs may live separately)
   let executionBasePath: string | null = null;
-  if (pathPrefix.startsWith('specs/')) {
-    const specDirName = pathPrefix.split('/')[1]; // e.g., "SPC-001-taskflow-mvp"
+  if (pathPrefix === 'planning/plans') {
+    // Direct spec structure: projectPath/execution/
+    const directExecutionDir = join(projectPath, 'execution');
+    try {
+      await access(directExecutionDir, constants.R_OK);
+      executionBasePath = directExecutionDir;
+      console.log(`[sync-project-state] Found direct execution directory at ${executionBasePath}`);
+    } catch {
+      // No execution directory
+    }
+  } else if (pathPrefix.startsWith('specs/')) {
+    // Spec-centric structure: specs/*/execution/
+    const specDirName = pathPrefix.split('/')[1];
     if (specDirName) {
       executionBasePath = await findExecutionDirectory(projectPath, specDirName);
       if (executionBasePath) {
