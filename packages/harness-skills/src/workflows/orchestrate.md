@@ -617,6 +617,34 @@ This returns `{ state, limits, plans }` containing:
 - `limits.maxExecutePhase` - How far ahead execution can go
 - `limits.maxPlanPhase` - How far ahead planning can go
 
+**🛑 IMMEDIATELY AFTER LOADING CONTEXT - CHECK AUDIT.md:**
+
+```bash
+# THIS CHECK IS MANDATORY - DO NOT SKIP
+ls -la $SPEC_DIR/AUDIT.md 2>/dev/null && echo "AUDIT EXISTS" || echo "NO AUDIT"
+```
+
+**If STATUS.md shows "complete" but AUDIT.md is MISSING:**
+
+```
+⚠️ SPEC CLAIMS COMPLETE BUT AUDIT MISSING - CANNOT ACCEPT AS COMPLETE
+
+STATUS.md "complete" ≠ Actually complete
+AUDIT.md with 100% adherence = Actually complete
+
+Running /harness:audit-milestone now...
+```
+
+**IMMEDIATELY start audit session:**
+
+```
+harness_start_session(workingDir, "/harness:audit-milestone")
+```
+
+**DO NOT declare spec complete, offer options, or stop orchestration until AUDIT.md exists!**
+
+---
+
 Extract from ROADMAP.md:
 
 - Current phase position
@@ -1192,11 +1220,31 @@ One tool call replaces dozens of polling calls. Much more efficient!
      - Mark phase as verified in orchestrator_state.verified_phases
      - Check if this was the LAST PHASE (check ROADMAP.md or session output)
      - **If LAST PHASE**:
+
+       **🛑 MANDATORY AUDIT CHECK BEFORE COMPLETION:**
+
+       ```bash
+       # YOU MUST RUN THIS CHECK - DO NOT SKIP
+       ls -la $SPEC_DIR/AUDIT.md 2>/dev/null && echo "AUDIT EXISTS" || echo "NO AUDIT"
+       ```
+
+       **If AUDIT.md is MISSING:**
        - **IMMEDIATELY start audit**: `harness_start_session(workingDir, "/harness:audit-milestone")`
-       - DO NOT declare spec complete until audit passes!
+       - DO NOT declare spec complete!
+       - DO NOT offer options to the user!
+       - DO NOT stop orchestration!
+
+       **If AUDIT.md EXISTS:**
+       - Read it and check for "100% adherence" or "ADHERENCE_100%"
+       - If passing → NOW proceed to completion step
+       - If failing → gaps exist, continue with gap remediation
+
+       **⚠️ COMPLETION GATE: Spec is NOT complete until AUDIT.md exists AND shows 100% adherence.**
+
      - **If more phases remain**:
        - This unlocks planning for next phase
        - Log: "Phase N verified - unlocking Phase N+1 planning"
+
    - **Audit session completes**:
      - Check result: ADHERENCE_100% or GAPS_FOUND
      - If GAPS_FOUND: New remediation phases were created, continue orchestration
@@ -1246,7 +1294,17 @@ One tool call replaces dozens of polling calls. Much more efficient!
    - Update queues accordingly
 
 7. **Check if done:**
-   - All queues empty AND all slots idle: Complete
+   - All queues empty AND all slots idle → **BUT WAIT, CHECK AUDIT FIRST:**
+
+   **🛑 FINAL GATE - MANDATORY AUDIT CHECK:**
+
+   ```bash
+   ls -la $SPEC_DIR/AUDIT.md 2>/dev/null && cat $SPEC_DIR/AUDIT.md | head -30 || echo "NO AUDIT"
+   ```
+
+   - If AUDIT.md **MISSING**: Start audit session, NOT done yet!
+   - If AUDIT.md shows **gaps**: Continue with gap remediation, NOT done yet!
+   - If AUDIT.md shows **100% adherence**: NOW proceed to completion step
    - Otherwise: Go to step 1
 
 **⚠️ SESSION REUSE IS THE #1 MISTAKE - DON'T DO IT:**
