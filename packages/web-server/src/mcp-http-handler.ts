@@ -20,6 +20,7 @@ import {
   registerListSessionsTool,
   registerMarkPhaseVerifiedTool,
   registerRespondCheckpointTool,
+  registerSendInputTool,
   registerSetExecutionStateTool,
   registerStartSessionTool,
   registerSyncProjectStateTool,
@@ -68,6 +69,7 @@ function createMcpServer(manager: PersistentSessionManager): McpServer {
   registerGetStateTool(server, manager);
   registerGetCheckpointTool(server, manager);
   registerRespondCheckpointTool(server, manager);
+  registerSendInputTool(server, manager);
   registerSetExecutionStateTool(server, manager.orchestrationStore);
   registerSyncProjectStateTool(server, manager.orchestrationStore);
   registerMarkPhaseVerifiedTool(server, manager.orchestrationStore);

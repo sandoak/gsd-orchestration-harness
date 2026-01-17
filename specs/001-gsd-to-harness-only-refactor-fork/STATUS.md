@@ -1,10 +1,10 @@
 # SPC-001: GSD to Harness Refactor - Status
 
-## Checkpoint: Planning Complete
+## Checkpoint: Implementation Complete
 
 **Date:** 2026-01-16
-**Status:** Ready for Implementation
-**Commit:** ad97d70
+**Status:** All Phases Complete
+**Final Commit:** 46420a1
 
 ## Planning Phase Complete
 
@@ -29,7 +29,7 @@ From SPEC.md:
 | 3     | Project State Documents            | Complete | 0b09560 |
 | 4     | Verification System                | Complete | 5b859e7 |
 | 5     | Worker Instructions Template       | Complete | a5e21f4 |
-| 6     | Migration and Cleanup              | Complete | (tbd)   |
+| 6     | Migration and Cleanup              | Complete | 46420a1 |
 
 ## Phase 0 Complete
 
@@ -274,6 +274,126 @@ velocity:
 
 ---
 
+## Phase 5 Complete
+
+**Commit:** a5e21f4
+**Date:** 2026-01-16
+
+**Goal:** Create worker prompt template that teaches the protocol and orchestrator context
+
+**What was done:**
+
+### Worker Instructions Template (`packages/harness-skills/src/templates/worker-prompt.md`)
+
+- Complete lifecycle documentation: startup → task execution → completion
+- Protocol usage examples for all message types:
+  - `session_ready` - Worker initialization
+  - `task_started` - Begin work on task
+  - `progress_update` - Report progress (percentage)
+  - `verification_needed` - Request verification
+  - `decision_needed` - Request user decision
+  - `action_needed` - Request human action
+  - `task_completed` - Report completion with artifacts
+  - `task_failed` - Report failure with recovery info
+- Key rules: DO NOT print "waiting", DO use MCP tools for all communication
+- Sub-agents and skills documentation: Workers retain full Claude Code capabilities
+- Context management guidelines: Stay under 50% context
+
+### Orchestrator Context Template (`packages/harness-skills/src/templates/orchestrator-context.md`)
+
+- Session lifecycle documentation
+- Parallel execution with dependency graph
+- Verification workflow steps
+- State tracking files to monitor
+- Available MCP tools reference table
+- Error handling patterns
+
+**Files created:** 2 new markdown files
+
+---
+
+## Phase 6 Complete
+
+**Commit:** 46420a1
+**Date:** 2026-01-16
+
+**Goal:** Add programmatic credential access for workers and complete message protocol
+
+**What was done:**
+
+### Credential Message Types
+
+- Added `credentials_needed` to `WorkerMessageType` in `packages/core/src/types/worker-messages.ts`
+  - Workers request credentials by service name and env vars
+  - Includes phase, plan, service, envVars[], reason, context
+- Added `credentials_provided` to `OrchestratorMessageType` in `packages/core/src/types/orchestrator-messages.ts`
+  - Orchestrator responds with credentials or error
+  - Includes credentials map, found status, error, instructions
+
+### Credential Provider (`packages/session-manager/src/credential-provider.ts`)
+
+- `CredentialProvider` class - Programmatic credential lookup
+- Default directory: `/mnt/dev-linux/projects/server-maintenance/docs/servers/`
+- Override via `HARNESS_CREDENTIALS_DIR` environment variable
+- `KNOWN_SERVICES` configuration for 12 common services:
+  - postgres, redis, supabase, stripe, openai, anthropic
+  - aws, github, sendgrid, twilio, vercel, cloudflare
+- `.env` file format parsing with quote handling
+- Context-aware file matching (e.g., `postgres-production.env`)
+- `lookupCredentials()` convenience function
+
+### Updated Worker Template
+
+- Added `credentials_needed` message type documentation
+- Known services table with default env vars
+- Usage example for credential requests
+
+### Updated Orchestrator Context
+
+- Added `CredentialProvider` usage example
+- Known services table
+- Credential file format documentation
+- Security guidelines for credential handling
+
+### Database Schema Updates
+
+- Added `credentials_needed` to worker_messages CHECK constraint
+- Added `credentials_provided` to orchestrator_messages CHECK constraint
+
+### MCP Tool Updates
+
+- Updated `harness_get_pending` to include `credentials_needed` in schema
+- Updated `requiresResponse` array to include `credentials_needed`
+
+**Files created:** 1 new TypeScript file
+**Files modified:** 6 existing files
+
+---
+
+## Implementation Complete
+
+**All 6 phases of SPC-001 have been successfully implemented.**
+
+**Summary of what was built:**
+
+1. **Forked GSD Skills** - Complete `packages/harness-skills/` with renamed workflows, agents, templates
+2. **Worker Message Protocol** - Structured MCP tools for worker ↔ orchestrator communication
+3. **File-Based Protocol** - `.orchestration/` directory for crash recovery
+4. **YAML Frontmatter** - Quick state reading from ROADMAP.md
+5. **Verification System** - Auto/Playwright/Human verification categories with engine
+6. **Worker Instructions** - Complete protocol documentation for workers
+7. **Credential System** - Programmatic credential lookup for orchestrator
+
+**Key benefits achieved:**
+
+- Replaces fragile output parsing with explicit structured messaging
+- Workers signal state via `harness_worker_report` MCP tool
+- Orchestrator responds via structured messages
+- Session state survives harness restart via `.orchestration/` files
+- Programmatic credential access without manual lookup
+
+---
+
 ## Source Files for Fork
 
 Local GSD installation (v1.5.18):
@@ -291,10 +411,12 @@ Local GSD installation (v1.5.18):
 
 ## Next Steps
 
-1. **Create `packages/harness-skills/` package** - New monorepo package
-2. **Fork agents** - Copy gsd-planner.md, gsd-researcher.md → harness-planner.md, harness-researcher.md
-3. **Fork workflows** - Copy and rename gsd:_ → harness:_
-4. **Rename MCP tools** - gsd*\* → harness*\*
+All implementation phases are complete. To use the refactored harness:
+
+1. **Test the protocol** - Spawn a worker session and verify message flow
+2. **Test credential lookup** - Request credentials via `credentials_needed` message
+3. **Test verification** - Run auto verifications via the VerificationEngine
+4. **Integration test** - Full plan execution with structured protocol
 
 ## Key Decisions Made
 

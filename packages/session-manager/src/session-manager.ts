@@ -784,6 +784,30 @@ export class SessionManager extends EventEmitter<SessionManagerEvents> {
   }
 
   /**
+   * Sends raw input to a session's stdin without any special handling.
+   * Unlike sendInput, this does NOT add newlines or handle special cases.
+   * The input is written exactly as provided.
+   *
+   * Use this when you want to send text to a running session similar to
+   * how a human would type - the session doesn't need to be at a checkpoint.
+   *
+   * @param sessionId - ID of the session
+   * @param input - Raw text to write to stdin (no automatic newlines)
+   * @returns true if sent, false if session not found
+   */
+  sendRawInput(sessionId: string, input: string): boolean {
+    const managed = this.sessions.get(sessionId);
+    if (!managed) {
+      return false;
+    }
+
+    // Write exactly what was provided - no newlines, no delays
+    managed.process.write(input);
+
+    return true;
+  }
+
+  /**
    * Resizes a session's PTY to match the terminal viewport.
    * @param sessionId - ID of the session
    * @param cols - Number of columns

@@ -880,32 +880,165 @@ When a session is at a user prompt (not a formal checkpoint):
 
 **CRITICAL: DO THE WORK - NEVER ASK THE USER**
 
-The orchestrator MUST autonomously handle ALL prompts by actually doing the work:
+The orchestrator MUST autonomously handle ALL prompts by actually doing the work.
 
-1. **Analyze the prompt:**
-   Read output to understand what's being asked
+### PROMPT CLASSIFICATION
 
-2. **ALWAYS do the actual work to answer:**
-   - "Does the app build?" → Actually run `npm run build` or `npm run dev` and check
-   - "Does feature X work?" → Actually test the feature using Bash, Playwright, or code inspection
-   - "Are there any errors?" → Actually check logs, run tests, inspect output
-   - Yes/No questions → Investigate and determine the answer yourself
-   - Continue prompts → Respond "y" or press Enter
-   - Selection prompts → Choose the most appropriate option based on context
+GSD workflows output plain text prompts. Classify by intent:
 
-3. **Respond immediately after determining the answer:**
+| Pattern                           | Type             | Action                        |
+| --------------------------------- | ---------------- | ----------------------------- |
+| "Does this match what you see?"   | verification     | Use Playwright to verify UI   |
+| "Does X work/appear/render?"      | verification     | Test with appropriate tool    |
+| "Is this correct?"                | verification     | Verify programmatically       |
+| "Let me know when X"              | action-required  | Attempt the action yourself   |
+| "Next step: X"                    | action-item      | Extract and execute X         |
+| "Apply migrations"                | action-item      | Run migration command         |
+| "Select/Choose option"            | decision         | Parse options, decide         |
+| "Reply with number"               | selection        | Choose appropriate option     |
+| "Type 'done' when"                | action-required  | Do the action, respond "done" |
+| Empty prompt (❯) after completion | session-complete | End session, start next task  |
+
+### VERIFICATION PROMPTS (verify-work, checkpoints)
+
+**Trigger phrases:**
+
+- "Does this match what you see?"
+- "Does X work?"
+- "Is the UI correct?"
+- "Can you see X?"
+- Any question about visual/functional state
+
+**MANDATORY VERIFICATION PROCESS:**
+
+1. **Parse what needs verification** from the prompt:
 
    ```
-   gsd_respond_checkpoint(sessionId, "1")  // Pass - you verified it works
-   gsd_respond_checkpoint(sessionId, "2")  // Fail - you found issues
-   gsd_respond_checkpoint(sessionId, "y")  // For yes/no prompts
+   "Expected: Admin sidebar shows 'Import Domains' link with Upload icon"
+   → Need to verify: sidebar has "Import Domains" link with icon
    ```
 
-4. **NEVER stop to ask the user:**
-   - Do NOT surface questions to the user
-   - Do NOT wait for user input on verification questions
-   - The orchestrator IS the verifier - do the verification yourself
-   - Only inform the user of RESULTS, not questions
+2. **Use Playwright to actually verify:**
+
+   ```typescript
+   // Navigate to the app
+   mcp__playwright__browser_navigate({ url: 'http://localhost:3000' });
+
+   // Take snapshot to check UI state
+   mcp__playwright__browser_snapshot({});
+
+   // Look for expected elements in snapshot
+   // Check if "Import Domains" appears, has correct icon
+   ```
+
+3. **Respond based on ACTUAL findings:**
+   - Found it works: `gsd_respond_checkpoint(sessionId, "yes")` or `"1"` or `"pass"`
+   - Found issues: `gsd_respond_checkpoint(sessionId, "no - [describe what's wrong]")`
+
+**NEVER respond "yes" or "1" without actually checking!**
+
+### ACTION-REQUIRED PROMPTS (debug, human-action)
+
+**Trigger phrases:**
+
+- "Let me know when X is done"
+- "Once you've applied X"
+- "Next step: X"
+- "You need to X"
+- "Run X command"
+
+**MANDATORY ACTION PROCESS:**
+
+1. **Extract the action** from the prompt:
+
+   ```
+   "Next step: Apply migrations 00001-00020 manually via Supabase Studio or SSH"
+   → Action: Apply migrations 00001-00020
+   → Method options: Supabase Studio, SSH, or CLI
+   ```
+
+2. **Attempt the action yourself:**
+
+   ```bash
+   # Try CLI first (most automatable)
+   supabase db push
+   # Or
+   psql $DATABASE_URL -f supabase/migrations/00008_email_templates.sql
+   # Or
+   cd /path/to/project && supabase migration up
+   ```
+
+3. **If action succeeds:**
+   `gsd_respond_checkpoint(sessionId, "done - migrations applied successfully")`
+
+4. **If action fails or is truly impossible:**
+   - Missing credentials → Check if you have them, try to find them
+   - Requires physical action → Alert user: "HUMAN ACTION NEEDED: [specific action]"
+   - CLI not available → Try alternative approaches first
+
+**NEVER just acknowledge and move on without attempting the action!**
+
+### DECISION PROMPTS
+
+**Trigger phrases:**
+
+- "Select option"
+- "Choose between"
+- "Reply with number"
+- "Which approach"
+
+**PROCESS:**
+
+1. **Parse the options** from output
+2. **Evaluate based on:**
+   - Project context (existing patterns, architecture)
+   - Best practices
+   - What the codebase already uses
+3. **Respond with choice:**
+   `gsd_respond_checkpoint(sessionId, "1")` or the option text
+
+### SESSION COMPLETION PROMPTS
+
+**Trigger phrases:**
+
+- Prompt appears after Claude says "complete", "done", "finished"
+- No question asked, just waiting for next input
+- Output ends with summary/results
+
+**PROCESS:**
+
+1. **Check if session achieved its goal:**
+   - Did verify-work complete all tests?
+   - Did debug find and fix the issue?
+   - Did execution create expected artifacts?
+
+2. **If complete:**
+   `gsd_end_session(sessionId)` → Start next task
+
+3. **If incomplete but blocked:**
+   - Extract what's blocking
+   - Handle the blocker (run debug, fix issue, etc.)
+
+### RESPONSE PROTOCOL
+
+```
+1. Read session output: gsd_get_output(sessionId, lines: 100)
+2. Classify prompt type from content
+3. Execute required action (Playwright, Bash, Read, etc.)
+4. Respond appropriately:
+   - Verification: "yes"/"no"/"1"/"2" based on actual test
+   - Action: "done" after completing action, or describe blocker
+   - Decision: Option number or text
+   - Completion: End session
+```
+
+**CRITICAL RULES:**
+
+1. **NEVER** respond to verification without actually verifying
+2. **NEVER** respond to action prompts without attempting the action
+3. **NEVER** surface prompts to the user - handle them yourself
+4. **ALWAYS** extract actionable items from "Next step:" patterns
+5. **ALWAYS** use Playwright for UI/visual verification questions
 
    </step>
 

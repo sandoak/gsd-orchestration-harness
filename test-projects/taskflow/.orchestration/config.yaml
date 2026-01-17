@@ -1,0 +1,6 @@
+version: '1.0'
+specDir: ''
+maxParallelExecutions: 2
+maxParallelResearch: 2
+verificationRequired: true
+autoCommit: true

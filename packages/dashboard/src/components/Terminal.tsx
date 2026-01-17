@@ -185,6 +185,11 @@ export const Terminal = forwardRef<TerminalHandle, TerminalProps>(
 
       if (newLines.length === 0) return;
 
+      // Check if user is at bottom BEFORE writing new content
+      // (isAtBottomRef may be stale if content was added without user scrolling)
+      const buffer = terminal.buffer.active;
+      const wasAtBottom = buffer.viewportY >= buffer.baseY - 3;
+
       // Write each new chunk to the terminal
       // Output may contain embedded newlines, use write() to let terminal handle line endings
       for (const chunk of newLines) {
@@ -195,7 +200,7 @@ export const Terminal = forwardRef<TerminalHandle, TerminalProps>(
       lastWrittenIndexRef.current = output.length;
 
       // Scroll to bottom after writing new content (only if user was at bottom)
-      if (isAtBottomRef.current) {
+      if (wasAtBottom) {
         terminal.scrollToBottom();
       }
     }, [output]);

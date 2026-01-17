@@ -452,6 +452,19 @@ export class PersistentSessionManager extends EventEmitter<PersistentSessionMana
   }
 
   /**
+   * Sends raw input to a session's stdin without any special handling.
+   * Unlike sendInput, this does NOT add newlines or handle special cases.
+   * The input is written exactly as provided.
+   *
+   * @param sessionId - ID of the session
+   * @param input - Raw text to write to stdin (no automatic newlines)
+   * @returns true if sent, false if session not found
+   */
+  sendRawInput(sessionId: string, input: string): boolean {
+    return this.sessionManager.sendRawInput(sessionId, input);
+  }
+
+  /**
    * Resizes a session's PTY to match the terminal viewport.
    *
    * @param sessionId - ID of the session

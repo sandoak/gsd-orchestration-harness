@@ -710,9 +710,12 @@ All v1 requirements mapped to phases.
 Co-Authored-By: Claude Opus 4.5 <noreply@anthropic.com>
 EOF
 )"
+
+# Push to remote
+git push -u origin HEAD 2>/dev/null || git push
 ```
 
-Confirm: "Committed: docs({spec-id}): create roadmap ({N} phases, {X} requirements)"
+Confirm: "Committed and pushed: docs({spec-id}): create roadmap ({N} phases, {X} requirements)"
 </step>
 
 <step name="offer_next">

@@ -134,6 +134,8 @@ importers:
         specifier: ^8.19.0
         version: 8.19.0
 
+  packages/harness-skills: {}
+
   packages/mcp-server:
     dependencies:
       '@gsd/core':
