@@ -596,6 +596,8 @@ What matters is: Are slots available? Start fresh sessions regardless of failure
 <step name="check_audit_completion">
 **⚠️ CRITICAL: Even if STATUS.md shows "complete", verify audit was performed!**
 
+**This step runs AUTOMATICALLY - no user prompts!**
+
 STATUS.md showing "complete" is NOT sufficient. You MUST verify:
 
 ```bash
@@ -603,39 +605,42 @@ STATUS.md showing "complete" is NOT sufficient. You MUST verify:
 ls -la $SPEC_DIR/AUDIT.md 2>/dev/null || echo "NO AUDIT FOUND"
 ```
 
-**If AUDIT.md does NOT exist:**
+**If AUDIT.md does NOT exist → AUTOMATICALLY run audit:**
 
 ```
-⚠️ SPEC MARKED COMPLETE BUT NO AUDIT PERFORMED!
-
-STATUS.md says "complete" but AUDIT.md is missing.
-This means the spec was never compared against requirements.
-
-AUDIT IS MANDATORY. Starting /harness:audit-milestone now.
+╔══════════════════════════════════════════════════════════════════════╗
+║  ⚠️ AUDIT REQUIRED - Running automatically                           ║
+╠══════════════════════════════════════════════════════════════════════╣
+║                                                                        ║
+║  STATUS.md says "complete" but AUDIT.md is missing.                   ║
+║  Starting /harness:audit-milestone to compare against requirements.   ║
+║                                                                        ║
+╚══════════════════════════════════════════════════════════════════════╝
 ```
 
-**THEN run audit:**
+**IMMEDIATELY start audit session (no user prompt!):**
 
 ```
 harness_start_session(workingDir, "/harness:audit-milestone")
 ```
 
-**Do NOT accept STATUS.md "complete" status without AUDIT.md present!**
+**Do NOT ask the user "would you like me to run audit?" - JUST RUN IT!**
 
-This catches the case where:
+The orchestrator is AUTONOMOUS. It does not ask permission to do required work.
 
-- All phases executed and verified via UAT
-- Someone marked spec complete prematurely
-- But audit-milestone was never run to compare against requirements
+**If AUDIT.md EXISTS → Check result and act accordingly:**
 
-**If AUDIT.md EXISTS:**
+Read AUDIT.md and parse the result:
 
-Read it and check the result:
+```bash
+cat $SPEC_DIR/AUDIT.md | grep -E "adherence|gaps_found"
+```
 
-- `adherence: 100%` → Spec is legitimately complete
-- `gaps_found: [list]` → Gaps still need remediation
+- `adherence: 100%` → Spec is legitimately complete, no further work needed
+- `gaps_found: [list]` with remediation phases → Continue orchestration to execute remediation
+- `gaps_found: [list]` without remediation → Run `/harness:plan-milestone-gaps` to create fix phases
 
-Only if AUDIT.md exists AND shows 100% adherence can you accept the spec as complete.
+**The orchestrator NEVER stops to ask the user what to do.** It identifies what's needed and does it.
 </step>
 
 <step name="handle_reverify_command">
@@ -1754,7 +1759,9 @@ Execute All Phases → Verify All Phases → AUDIT
 </step>
 
 <step name="completion">
-When audit passes (100% adherence) OR user accepts gaps:
+When audit passes (100% adherence):
+
+**Display completion summary and STOP. Do NOT offer options!**
 
 ```
 ╔══════════════════════════════════════════════════════════════════════╗
@@ -1764,7 +1771,7 @@ When audit passes (100% adherence) OR user accepts gaps:
 ║  ✓ All phases planned                                                 ║
 ║  ✓ All plans executed                                                 ║
 ║  ✓ All work verified                                                  ║
-║  ✓ Milestone audit passed                                             ║
+║  ✓ Milestone audit passed (100% adherence)                            ║
 ║                                                                        ║
 ║  Pipeline Summary:                                                     ║
 ║    Phases planned: [N]                                                ║
@@ -1772,17 +1779,31 @@ When audit passes (100% adherence) OR user accepts gaps:
 ║    Verifications passed: [N]                                          ║
 ║    Checkpoints handled: [N]                                           ║
 ║    Audit iterations: [N]                                              ║
-║    Spec adherence: [X]%                                               ║
+║    Spec adherence: 100%                                               ║
 ║                                                                        ║
 ║  Artifacts:                                                            ║
-║    - STATE.md updated                                                  ║
-║    - AUDIT.md created                                                  ║
+║    - STATUS.md updated to "complete"                                   ║
+║    - AUDIT.md created with adherence report                           ║
 ║                                                                        ║
-║  Next: /harness:complete-milestone                                     ║
+║  Spec is complete. No further action needed.                          ║
 ║                                                                        ║
 ╚══════════════════════════════════════════════════════════════════════╝
 ```
 
+**⚠️ DO NOT offer options like:**
+
+- "Would you like me to push changes?"
+- "Would you like to start another spec?"
+- "Options: 1. Push 2. Continue 3. Stop"
+
+**The orchestrator's job is DONE when:**
+
+1. All phases executed and verified
+2. Audit passes with 100% adherence
+3. STATUS.md shows complete
+4. AUDIT.md exists with passing result
+
+**Just report completion and stop.** The user knows what to do next.
 </step>
 
 </process>
