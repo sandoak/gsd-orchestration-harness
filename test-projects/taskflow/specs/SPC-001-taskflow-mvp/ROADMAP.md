@@ -3,14 +3,14 @@ version: 1
 project: taskflow
 milestone: mvp
 
-current_phase: 2
-current_plan: 3
-status: executing
+current_phase: 4
+current_plan: 1
+status: executed
 
 total_phases: 4
-completed_phases: 2
+completed_phases: 4
 total_plans: 10
-completed_plans: 6
+completed_plans: 10
 
 spec_dir: specs/SPC-001-taskflow-mvp
 spec_id: SPC-001
@@ -111,9 +111,9 @@ command: pnpm test
 | 03-02 | Task form component | 01-03               | 1    | packages/web/src/components/TaskForm\* |
 | 03-03 | API integration     | 03-01, 03-02, 02-02 | 2    | packages/web/src/api/\*                |
 
-- [ ] 03-01-PLAN.md: Task list component
-- [ ] 03-02-PLAN.md: Task form component
-- [ ] 03-03-PLAN.md: API integration
+- [x] 03-01-PLAN.md: Task list component
+- [x] 03-02-PLAN.md: Task form component
+- [x] 03-03-PLAN.md: API integration
 
 ### Cross-Phase Parallelization
 
@@ -141,7 +141,7 @@ command: pnpm build
 | ----- | --------- | ---------- | ---- | ------------------- |
 | 04-01 | E2E tests | 03-03      | 1    | packages/web/e2e/\* |
 
-- [ ] 04-01-PLAN.md: E2E tests (playwright verification)
+- [x] 04-01-PLAN.md: E2E tests (playwright verification)
 
 ### Playwright Verification
 
