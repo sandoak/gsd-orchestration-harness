@@ -11,18 +11,16 @@ import Fastify, { type FastifyInstance } from 'fastify';
  * Get version info from git (cached at startup).
  * Version is simply the commit count - no manual bumping needed.
  */
-const GIT_INFO = ((): { commit: string; version: string } => {
+const GIT_INFO = ((): { version: string } => {
   try {
     const commit = execSync('git rev-parse --short HEAD', { encoding: 'utf-8' }).trim();
     const commitCount = execSync('git rev-list --count HEAD', { encoding: 'utf-8' }).trim();
     return {
-      commit,
-      version: `build.${commitCount}`,
+      version: `${commitCount}.${commit}`,
     };
   } catch {
     return {
-      commit: 'unknown',
-      version: 'build.0',
+      version: '0.unknown',
     };
   }
 })();
@@ -142,7 +140,6 @@ export class FastifyServer {
       return {
         status: 'ok',
         version: GIT_INFO.version,
-        commit: GIT_INFO.commit,
         started: BUILD_TIME,
       };
     });
