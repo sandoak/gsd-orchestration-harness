@@ -8,11 +8,45 @@ Read STATE.md before any operation to load project context.
 
 <process>
 
-<step name="load_project_state" priority="first">
-Before any operation, read project state:
+<step name="discover_planning_directory" priority="first">
+Find the planning directory - supports both spec-centric and legacy structures:
 
 ```bash
-cat .planning/STATE.md 2>/dev/null
+# Try spec-centric structure first: specs/*/planning/plans/
+SPEC_PLANS=$(ls -d specs/*/planning/plans 2>/dev/null | head -1)
+if [ -n "$SPEC_PLANS" ]; then
+  PLANNING_BASE="$SPEC_PLANS"
+  SPEC_DIR=$(dirname $(dirname "$SPEC_PLANS"))
+  STATE_FILE="$SPEC_DIR/STATE.md"
+  ROADMAP_FILE="$SPEC_DIR/ROADMAP.md"
+  echo "Using spec-centric structure: $PLANNING_BASE"
+else
+  # Fall back to legacy structure: .planning/phases/
+  if [ -d ".planning/phases" ]; then
+    PLANNING_BASE=".planning/phases"
+    STATE_FILE=".planning/STATE.md"
+    ROADMAP_FILE=".planning/ROADMAP.md"
+    echo "Using legacy structure: $PLANNING_BASE"
+  else
+    echo "ERROR: No planning directory found"
+    echo "Expected: specs/*/planning/plans/ OR .planning/phases/"
+    exit 1
+  fi
+fi
+```
+
+Store these paths for use in subsequent steps:
+
+- `$PLANNING_BASE` - Base directory containing phase subdirectories
+- `$STATE_FILE` - Path to STATE.md
+- `$ROADMAP_FILE` - Path to ROADMAP.md
+  </step>
+
+<step name="load_project_state">
+Read project state from discovered location:
+
+```bash
+cat "$STATE_FILE" 2>/dev/null
 ```
 
 **If file exists:** Parse and internalize:
@@ -22,7 +56,7 @@ cat .planning/STATE.md 2>/dev/null
 - Blockers/concerns (things to watch for)
 - Brief alignment status
 
-**If file missing but .planning/ exists:**
+**If file missing but planning artifacts exist:**
 
 ```
 STATE.md missing but planning artifacts exist.
@@ -31,7 +65,7 @@ Options:
 2. Continue without project state (may lose accumulated context)
 ```
 
-**If .planning/ doesn't exist:** Error - project not initialized.
+**If planning directory doesn't exist:** Error - project not initialized.
 
 This ensures every execution has full project context.
 </step>
@@ -43,11 +77,11 @@ Find the next plan to execute:
 - Identify first plan without corresponding SUMMARY
 
 ```bash
-cat .planning/ROADMAP.md
+cat "$ROADMAP_FILE"
 # Look for phase with "In progress" status
 # Then find plans in that phase
-ls .planning/phases/XX-name/*-PLAN.md 2>/dev/null | sort
-ls .planning/phases/XX-name/*-SUMMARY.md 2>/dev/null | sort
+ls "$PLANNING_BASE"/XX-name/*-PLAN.md 2>/dev/null | sort
+ls "$PLANNING_BASE"/XX-name/*-SUMMARY.md 2>/dev/null | sort
 ```
 
 **Logic:**
@@ -60,8 +94,8 @@ ls .planning/phases/XX-name/*-SUMMARY.md 2>/dev/null | sort
 
 Phase directories can be integer or decimal format:
 
-- Integer: `.planning/phases/01-foundation/01-01-PLAN.md`
-- Decimal: `.planning/phases/01.1-hotfix/01.1-01-PLAN.md`
+- Integer: `$PLANNING_BASE/01-foundation/01-01-PLAN.md`
+- Decimal: `$PLANNING_BASE/01.1-hotfix/01.1-01-PLAN.md`
 
 Parse phase number from path (handles both formats):
 
@@ -79,7 +113,7 @@ Confirm with user if ambiguous.
 
 <config-check>
 ```bash
-cat .planning/config.json 2>/dev/null
+cat "$SPEC_DIR/config.json" 2>/dev/null || cat .planning/config.json 2>/dev/null
 ```
 </config-check>
 
@@ -1038,13 +1072,16 @@ git commit -m "fix(08-02): correct email validation regex
 
 **Note:** TDD plans have their own commit pattern (test/feat/refactor for RED/GREEN/REFACTOR phases). See `<tdd_plan_execution>` section above.
 
-**5. Record commit hash:**
+**5. Record commit hash and push:**
 
-After committing, capture hash for SUMMARY.md:
+After committing, capture hash and push to remote:
 
 ```bash
 TASK_COMMIT=$(git rev-parse --short HEAD)
 echo "Task ${TASK_NUM} committed: ${TASK_COMMIT}"
+
+# Push to remote (creates upstream tracking if needed)
+git push -u origin HEAD 2>/dev/null || git push
 ```
 
 Store in array or list for SUMMARY generation:
@@ -1583,6 +1620,14 @@ EOF
 )"
 ```
 
+**5. Push to remote:**
+
+```bash
+git push
+```
+
+All commits (task commits + metadata) should now be synced to GitHub.
+
 **Git log after plan execution:**
 
 ```
@@ -1643,6 +1688,23 @@ Skip this step.
 **MANDATORY: Verify remaining work before presenting next steps.**
 
 Do NOT skip this verification. Do NOT assume phase or milestone completion without checking.
+
+**Signal checkpoint via MCP (if available):**
+
+If harness MCP is available and session ID is known, signal plan completion:
+
+```
+harness_signal_checkpoint({
+  sessionId: "{current_session_id}",
+  type: "completion",
+  workflow: "execute-plan",
+  phase: {phase_number},
+  summary: "Plan {phase}-{plan} complete - {N}/{M} tasks executed",
+  nextCommand: "{determined by routing logic below}"
+})
+```
+
+If MCP tool is not available, fall back to output signaling.
 
 **Step 0: Check for USER-SETUP.md**
 

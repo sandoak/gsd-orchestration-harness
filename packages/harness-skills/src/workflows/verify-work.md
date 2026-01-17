@@ -21,11 +21,42 @@ No Pass/Fail buttons. No severity questions. Just: "Here's what should happen. D
 
 <process>
 
+<step name="discover_planning_directory" priority="first">
+Find the planning directory - supports both spec-centric and legacy structures:
+
+```bash
+# Try spec-centric structure first: specs/*/planning/plans/
+SPEC_PLANS=$(ls -d specs/*/planning/plans 2>/dev/null | head -1)
+if [ -n "$SPEC_PLANS" ]; then
+  PLANNING_BASE="$SPEC_PLANS"
+  SPEC_DIR=$(dirname $(dirname "$SPEC_PLANS"))
+  STATE_FILE="$SPEC_DIR/STATE.md"
+  echo "Using spec-centric structure: $PLANNING_BASE"
+else
+  # Fall back to legacy structure: .planning/phases/
+  if [ -d ".planning/phases" ]; then
+    PLANNING_BASE=".planning/phases"
+    STATE_FILE=".planning/STATE.md"
+    echo "Using legacy structure: $PLANNING_BASE"
+  else
+    echo "ERROR: No planning directory found"
+    echo "Expected: specs/*/planning/plans/ OR .planning/phases/"
+    exit 1
+  fi
+fi
+```
+
+Store these paths for use in subsequent steps:
+
+- `$PLANNING_BASE` - Base directory containing phase subdirectories
+- `$STATE_FILE` - Path to STATE.md
+  </step>
+
 <step name="check_active_session">
 **First: Check for active UAT sessions**
 
 ```bash
-find .planning/phases -name "*-UAT.md" -type f 2>/dev/null | head -5
+find "$PLANNING_BASE" -name "*-UAT.md" -type f 2>/dev/null | head -5
 ```
 
 **If active sessions exist AND no $ARGUMENTS provided:**
@@ -75,7 +106,7 @@ Parse $ARGUMENTS as phase number (e.g., "4") or plan number (e.g., "04-02").
 
 ```bash
 # Find phase directory
-PHASE_DIR=$(ls -d .planning/phases/${PHASE_ARG}* 2>/dev/null | head -1)
+PHASE_DIR=$(ls -d "$PLANNING_BASE"/${PHASE_ARG}* 2>/dev/null | head -1)
 
 # Find SUMMARY files
 ls "$PHASE_DIR"/*-SUMMARY.md 2>/dev/null
@@ -165,7 +196,7 @@ skipped: 0
 [none yet]
 ```
 
-Write to `.planning/phases/XX-name/{phase}-UAT.md`
+Write to `$PHASE_DIR/{phase}-UAT.md`
 
 Proceed to `present_test`.
 </step>
@@ -296,10 +327,27 @@ Clear Current Test section:
 [testing complete]
 ```
 
+**Signal checkpoint via MCP (if available):**
+
+If harness MCP is available and session ID is known, signal verification completion:
+
+```
+harness_signal_checkpoint({
+  sessionId: "{current_session_id}",
+  type: "completion",
+  workflow: "verify-work",
+  phase: {phase_number},
+  summary: "UAT complete - {passed} passed, {issues} issues",
+  nextCommand: "{determined by issue count - see routing below}"
+})
+```
+
+If MCP tool is not available, fall back to output signaling.
+
 Commit the UAT file:
 
 ```bash
-git add ".planning/phases/XX-name/{phase}-UAT.md"
+git add "$PHASE_DIR/{phase}-UAT.md"
 git commit -m "test({phase}): complete UAT - {passed} passed, {issues} issues"
 ```
 

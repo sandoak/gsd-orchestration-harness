@@ -1300,6 +1300,23 @@ Return structured planning outcome to orchestrator.
 
 ## Planning Complete
 
+**Signal checkpoint via MCP (if available):**
+
+If harness MCP is available and session ID is known, call the explicit checkpoint signal:
+
+```
+harness_signal_checkpoint({
+  sessionId: "{current_session_id}",
+  type: "completion",
+  workflow: "plan-phase",
+  phase: {phase_number},
+  summary: "Phase {X} planning complete - {N} plan(s) in {M} wave(s)",
+  nextCommand: "/harness:execute-phase {phase_number}"
+})
+```
+
+If MCP tool is not available, fall back to output signaling below.
+
 ```markdown
 ## PLANNING COMPLETE
 

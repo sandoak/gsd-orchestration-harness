@@ -191,10 +191,42 @@ You are the autonomous conductor AND the QA tester. KEEP WORKING until done or s
 <trigger>
 Use this workflow when:
 - User invokes /harness:orchestrate
+- User invokes /harness:orchestrate [project-path]
 - Harness MCP tools are available (harness_* tools visible)
 - Parallel Harness session execution is desired
 - Managing planning, execution, and verification in parallel
 </trigger>
+
+<arguments>
+**Usage:**
+```
+/harness:orchestrate                    # Run from current working directory
+/harness:orchestrate [project-path]     # Run from specified project path
+```
+
+**$ARGUMENTS handling:**
+
+If `$ARGUMENTS` is provided (non-empty):
+
+- Use `$ARGUMENTS` as the absolute project path
+- All file reads use this path: `$ARGUMENTS/.planning/ROADMAP.md`
+- All harness calls use this path: `harness_start_session($ARGUMENTS, command)`
+- All harness_sync_project_state calls: `harness_sync_project_state($ARGUMENTS)`
+
+If `$ARGUMENTS` is empty:
+
+- Use current working directory as project path
+- File reads use relative paths: `.planning/ROADMAP.md`
+- Harness calls use current directory
+
+**Store the resolved path:**
+
+```
+PROJECT_PATH = $ARGUMENTS if provided, else $(pwd)
+```
+
+Use `$PROJECT_PATH` throughout the workflow for consistency.
+</arguments>
 
 <prerequisites>
 **IMPORTANT: The Harness Harness must be running before orchestration can begin.**
@@ -358,16 +390,59 @@ Then retry /harness:orchestrate
 **JUST TRY THE TOOL.** If it works, proceed. If it errors, ask user to start the harness.
 </step>
 
+<step name="resolve_project_path">
+**Resolve the project path from $ARGUMENTS:**
+
+```
+If $ARGUMENTS is non-empty:
+  PROJECT_PATH = $ARGUMENTS
+Else:
+  PROJECT_PATH = $(pwd)
+```
+
+**Locate the spec directory:**
+
+The project may use either structure:
+
+1. Legacy GSD: `$PROJECT_PATH/.planning/ROADMAP.md`
+2. Spec-centric: `$PROJECT_PATH/specs/*/ROADMAP.md`
+
+```bash
+# Check for spec-centric structure first
+SPEC_DIR=$(find $PROJECT_PATH/specs -name "ROADMAP.md" -type f 2>/dev/null | head -1 | xargs dirname)
+
+# Fall back to legacy structure
+if [ -z "$SPEC_DIR" ]; then
+  SPEC_DIR="$PROJECT_PATH/.planning"
+fi
+```
+
+Store `SPEC_DIR` for use in subsequent steps.
+</step>
+
 <step name="load_project_context">
 Load project state to understand what work needs orchestration:
 
 ```bash
-cat .planning/ROADMAP.md
-cat .planning/STATE.md
-ls -R .planning/phases/
+cat $SPEC_DIR/ROADMAP.md
+cat $SPEC_DIR/STATUS.md       # or STATE.md for legacy projects
+ls -R $SPEC_DIR/planning/plans/
 ```
 
-Extract:
+**Sync harness state with project:**
+
+```
+harness_sync_project_state($PROJECT_PATH)
+```
+
+This returns `{ state, limits, plans }` containing:
+
+- `state.highestExecutedPhase` - Last fully completed phase
+- `state.pendingVerifyPhase` - Phase awaiting verification
+- `limits.maxExecutePhase` - How far ahead execution can go
+- `limits.maxPlanPhase` - How far ahead planning can go
+
+Extract from ROADMAP.md:
 
 - Current phase position
 - Phases that need planning (no PLAN.md files)
@@ -451,29 +526,43 @@ With execute-phase, the orchestrator runs WHOLE PHASES, not individual plans:
 **execute-phase handles internally:**
 
 - Wave-based parallelism (Wave 1 plans run in parallel, then Wave 2, etc.)
-- Plan-level verification after each plan
 - Reconciliation between plans (validates next plan against what was built)
 - Creates SUMMARY.md files for each plan
+- **Does NOT run verification** - orchestrator spawns verify separately
 
 **What orchestrator sees:**
 
 - Session starts: `/harness:execute-phase N`
 - Session runs (may take a while with many plans)
-- Session completes: All plans executed with internal verification
-- Orchestrator runs: `/harness:verify-work phase-N` for final phase-level verification
+- Session completes: All plans executed, SUMMARY.md files created
+- Orchestrator IMMEDIATELY spawns `/harness:verify-work phase-N` in a DIFFERENT slot
 
-**Verification Queue (PHASE-LEVEL ONLY with execute-phase):**
+**⚠️ CRITICAL: VERIFICATION RUNS IN SEPARATE SLOT FOR PARALLELISM**
 
 ```
-PHASE-LEVEL (orchestrator runs after execute-phase completes):
-[0] /harness:verify-work phase-1  (after execute-phase 1 completes)
-[1] /harness:verify-work phase-2  (after execute-phase 2 completes)
-[2] /harness:verify-work phase-3  (after execute-phase 3 completes)
-...
+When execute-phase N completes:
+  Slot 1: [execute-phase N complete] → END SESSION
+  Slot 2: [idle] → START /harness:verify-work phase-N
+  Slot 3: [idle] → START /harness:execute-phase N+1 (if limits allow)
 ```
 
-Note: Plan-level verification happens INTERNALLY in execute-phase.
-The orchestrator only needs to run phase-level verification.
+This allows:
+
+- Phase N verification running in Slot 2
+- Phase N+1 execution starting in Slot 3 (parallel!)
+- Maximum throughput through the pipeline
+
+**Verification Queue (spawned by orchestrator after execution):**
+
+```
+WHEN execute-phase N completes → spawn in DIFFERENT slot:
+/harness:verify-work phase-1  (after execute-phase 1 completes)
+/harness:verify-work phase-2  (after execute-phase 2 completes)
+/harness:verify-work phase-3  (after execute-phase 3 completes)
+```
+
+**NEVER wait for verification to complete before starting next execution.**
+Use your slots efficiently - verify and execute can run in parallel!
 
 **⚠️ STARTUP STATE CHECK (at orchestration start):**
 
@@ -1045,6 +1134,34 @@ Harness workflows output plain text prompts. Classify by intent:
 <step name="checkpoint_handling">
 When a formal checkpoint is detected:
 
+**Check checkpoint type via `harness_get_checkpoint(sessionId)`**
+
+**For checkpoint:completion (workflow finished):**
+
+Completion checkpoints signal that a workflow has finished successfully. These are NOT user interaction checkpoints - they're status updates from the session.
+
+1. Get checkpoint details: `harness_get_checkpoint(sessionId)`
+2. Check `checkpoint.workflow` to see what finished:
+   - `plan-phase`: Planning complete → spawn execution
+   - `execute-phase`: Execution complete → spawn verification
+   - `execute-plan`: Individual plan complete → may continue to next plan
+   - `verify-work`: Verification complete → route based on issues
+   - `research-phase`: Research complete → spawn planning
+3. Check `checkpoint.nextCommand` for recommended action
+4. **Acknowledge checkpoint:** `harness_respond_checkpoint(sessionId, "acknowledged")`
+5. **Take action:** Start the next workflow in an available slot
+
+**Example completion flow:**
+
+```
+1. harness_get_checkpoint(sessionId) returns:
+   { type: "completion", workflow: "plan-phase", nextCommand: "/harness:execute-phase 3" }
+2. End the planning session (it's done)
+3. Spawn execute-phase in available slot
+```
+
+---
+
 **CRITICAL: AUTONOMOUS VERIFICATION - DO THE WORK**
 
 **⚠️ NEVER AUTO-PASS VERIFICATION CHECKPOINTS!**
@@ -1342,6 +1459,7 @@ Quick reference for harness MCP tools:
 
 - Purpose: Start work in an available slot
 - Args: `workingDir`, `command`
+- **workingDir**: Use `$PROJECT_PATH` (resolved from `$ARGUMENTS` or current directory)
 - Task types (any slot):
   - Verify: `/harness:verify-work phase-N` (phase-level verify)
   - Execute: `/harness:execute-phase N` (all plans with wave parallelism)

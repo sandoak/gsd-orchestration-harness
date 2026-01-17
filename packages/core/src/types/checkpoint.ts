@@ -1,4 +1,4 @@
-export type CheckpointType = 'human-verify' | 'decision' | 'human-action';
+export type CheckpointType = 'human-verify' | 'decision' | 'human-action' | 'completion';
 
 export interface CheckpointBase {
   type: CheckpointType;
@@ -33,4 +33,17 @@ export interface HumanActionCheckpoint extends CheckpointBase {
   resumeSignal: string;
 }
 
-export type CheckpointInfo = HumanVerifyCheckpoint | DecisionCheckpoint | HumanActionCheckpoint;
+export interface CompletionCheckpoint extends CheckpointBase {
+  type: 'completion';
+  workflow: string;
+  status: 'success' | 'partial' | 'failed';
+  summary: string;
+  nextCommand?: string;
+  resumeSignal: string;
+}
+
+export type CheckpointInfo =
+  | HumanVerifyCheckpoint
+  | DecisionCheckpoint
+  | HumanActionCheckpoint
+  | CompletionCheckpoint;

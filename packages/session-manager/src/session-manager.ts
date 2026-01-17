@@ -403,13 +403,14 @@ export class SessionManager extends EventEmitter<SessionManagerEvents> {
     const lines = stripped.split('\n').slice(-10); // Last 10 lines for better context
     const lastChunk = lines.join('\n');
 
-    // Check for "Baked for" anywhere in recent output - indicates Claude finished working
-    // This takes precedence over spinner detection
-    const hasBakedFor = stripped.match(/Baked for/i);
+    // Check for completion message anywhere in recent output - indicates Claude finished working
+    // Claude Code uses randomized cooking verbs: "Baked for", "Cogitated for", "Sautéed for", etc.
+    // Pattern matches: "Word for Xm Ys" or "Word for Xs" (e.g., "Cogitated for 3m 15s")
+    const hasCompletionMessage = stripped.match(/\w+ for \d+[ms]/i);
 
-    // Active spinner chars - but ONLY if no "Baked for" completion message found
-    // "Baked for" means Claude is done, regardless of other spinner chars in output
-    const hasActiveSpinner = !hasBakedFor && lastChunk.match(/[✶✻✽✢]/);
+    // Active spinner chars - but ONLY if no completion message found
+    // Completion message means Claude is done, regardless of other spinner chars in output
+    const hasActiveSpinner = !hasCompletionMessage && lastChunk.match(/[✶✻✽✢]/);
 
     // Match ❯ at end of line
     const promptMatch = lastChunk.match(/❯\s*$/m);
@@ -418,7 +419,7 @@ export class SessionManager extends EventEmitter<SessionManagerEvents> {
     if (lastChunk.includes('❯')) {
       // eslint-disable-next-line no-console
       console.log(
-        `[wait-detect] Found ❯ in output. hasActiveSpinner=${!!hasActiveSpinner}, hasBakedFor=${!!hasBakedFor}, promptMatch=${!!promptMatch}`
+        `[wait-detect] Found ❯ in output. hasActiveSpinner=${!!hasActiveSpinner}, hasCompletionMessage=${!!hasCompletionMessage}, promptMatch=${!!promptMatch}`
       );
     }
 

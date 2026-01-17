@@ -65,6 +65,26 @@ CREATE TABLE IF NOT EXISTS orchestrator_messages (
 
 CREATE INDEX IF NOT EXISTS idx_orchestrator_messages_session_id ON orchestrator_messages(session_id);
 CREATE INDEX IF NOT EXISTS idx_orchestrator_messages_response_to ON orchestrator_messages(in_response_to);
+
+-- Explicit checkpoints for workflow completion signaling
+CREATE TABLE IF NOT EXISTS checkpoints (
+  id TEXT PRIMARY KEY,
+  session_id TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+  type TEXT NOT NULL CHECK (type IN ('completion', 'human-verify', 'decision', 'human-action', 'error')),
+  workflow TEXT,
+  phase INTEGER,
+  status TEXT NOT NULL CHECK (status IN ('pending', 'acknowledged', 'resolved')),
+  summary TEXT NOT NULL,
+  next_command TEXT,
+  data TEXT,
+  created_at TEXT DEFAULT (datetime('now')),
+  acknowledged_at TEXT,
+  resolved_at TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_checkpoints_session_id ON checkpoints(session_id);
+CREATE INDEX IF NOT EXISTS idx_checkpoints_status ON checkpoints(status);
+CREATE INDEX IF NOT EXISTS idx_checkpoints_pending ON checkpoints(session_id, status) WHERE status = 'pending';
 `;
 
 // Use data subdirectory to avoid conflict with harness installation at ~/.harness

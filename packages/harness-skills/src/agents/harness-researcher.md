@@ -912,6 +912,23 @@ Return to orchestrator with:
 
 ## Research Complete
 
+**Signal checkpoint via MCP (if available):**
+
+If harness MCP is available and session ID is known, call the explicit checkpoint signal:
+
+```
+harness_signal_checkpoint({
+  sessionId: "{current_session_id}",
+  type: "completion",
+  workflow: "research-phase",
+  phase: {phase_number},
+  summary: "Research complete - {mode} mode, {confidence} confidence",
+  nextCommand: "/harness:plan-phase {phase_number}"
+})
+```
+
+If MCP tool is not available, fall back to output signaling below.
+
 When research finishes successfully:
 
 ```markdown

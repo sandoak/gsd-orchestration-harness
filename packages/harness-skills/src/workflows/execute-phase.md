@@ -12,11 +12,45 @@ Read STATE.md before any operation to load project context.
 
 <process>
 
-<step name="load_project_state" priority="first">
-Before any operation, read project state:
+<step name="discover_planning_directory" priority="first">
+Find the planning directory - supports both spec-centric and legacy structures:
 
 ```bash
-cat .planning/STATE.md 2>/dev/null
+# Try spec-centric structure first: specs/*/planning/plans/
+SPEC_PLANS=$(ls -d specs/*/planning/plans 2>/dev/null | head -1)
+if [ -n "$SPEC_PLANS" ]; then
+  PLANNING_BASE="$SPEC_PLANS"
+  SPEC_DIR=$(dirname $(dirname "$SPEC_PLANS"))
+  STATE_FILE="$SPEC_DIR/STATE.md"
+  ROADMAP_FILE="$SPEC_DIR/ROADMAP.md"
+  echo "Using spec-centric structure: $PLANNING_BASE"
+else
+  # Fall back to legacy structure: .planning/phases/
+  if [ -d ".planning/phases" ]; then
+    PLANNING_BASE=".planning/phases"
+    STATE_FILE=".planning/STATE.md"
+    ROADMAP_FILE=".planning/ROADMAP.md"
+    echo "Using legacy structure: $PLANNING_BASE"
+  else
+    echo "ERROR: No planning directory found"
+    echo "Expected: specs/*/planning/plans/ OR .planning/phases/"
+    exit 1
+  fi
+fi
+```
+
+Store these paths for use in subsequent steps:
+
+- `$PLANNING_BASE` - Base directory containing phase subdirectories
+- `$STATE_FILE` - Path to STATE.md
+- `$ROADMAP_FILE` - Path to ROADMAP.md
+  </step>
+
+<step name="load_project_state">
+Read project state from discovered location:
+
+```bash
+cat "$STATE_FILE" 2>/dev/null
 ```
 
 **If file exists:** Parse and internalize:
@@ -25,7 +59,7 @@ cat .planning/STATE.md 2>/dev/null
 - Accumulated decisions (constraints on this execution)
 - Blockers/concerns (things to watch for)
 
-**If file missing but .planning/ exists:**
+**If file missing but planning artifacts exist:**
 
 ```
 STATE.md missing but planning artifacts exist.
@@ -34,16 +68,16 @@ Options:
 2. Continue without project state (may lose accumulated context)
 ```
 
-**If .planning/ doesn't exist:** Error - project not initialized.
+**If planning directory doesn't exist:** Error - project not initialized.
 </step>
 
 <step name="validate_phase">
 Confirm phase exists and has plans:
 
 ```bash
-PHASE_DIR=$(ls -d .planning/phases/${PHASE_ARG}* 2>/dev/null | head -1)
+PHASE_DIR=$(ls -d "$PLANNING_BASE"/${PHASE_ARG}* 2>/dev/null | head -1)
 if [ -z "$PHASE_DIR" ]; then
-  echo "ERROR: No phase directory matching '${PHASE_ARG}'"
+  echo "ERROR: No phase directory matching '${PHASE_ARG}' in $PLANNING_BASE"
   exit 1
 fi
 
@@ -177,8 +211,7 @@ Execute each wave in sequence. Autonomous plans within a wave run in parallel.
 
    <context>
    Plan: @{plan_path}
-   Project state: @.planning/STATE.md
-   Config: @.planning/config.json (if exists)
+   Project state: @{$STATE_FILE}
    </context>
 
    <success_criteria>
@@ -355,105 +388,46 @@ After all waves complete, aggregate results:
 
 </step>
 
-<step name="verify_phase_goal">
-Verify phase achieved its GOAL, not just completed its TASKS.
+<step name="signal_execution_complete">
+**IMPORTANT: Verification runs SEPARATELY from execution.**
 
-**Spawn verifier:**
+After all waves complete, signal to orchestrator that execution is done.
+The orchestrator will spawn verification in a separate slot, allowing parallel work.
+
+**Signal checkpoint via MCP (if available):**
+
+Call the harness MCP tool to explicitly notify the orchestrator:
 
 ```
-Task(
-  prompt="Verify phase {phase_number} goal achievement.
-
-Phase directory: {phase_dir}
-Phase goal: {goal from ROADMAP.md}
-
-Check must_haves against actual codebase. Create VERIFICATION.md.
-Verify what actually exists in the code.",
-  subagent_type="harness-verifier"
-)
+harness_signal_checkpoint({
+  sessionId: "{current_session_id}",
+  type: "completion",
+  workflow: "execute-phase",
+  phase: {phase_number},
+  summary: "Phase {X} execution complete - {N} plans across {M} waves",
+  nextCommand: "/harness:verify-work {phase_number}"
+})
 ```
 
-**Read verification status:**
+If MCP tool is not available, fall back to output signaling.
 
-```bash
-grep "^status:" "$PHASE_DIR"/*-VERIFICATION.md | cut -d: -f2 | tr -d ' '
-```
-
-**Route by status:**
-
-| Status         | Action                                                          |
-| -------------- | --------------------------------------------------------------- |
-| `passed`       | Continue to update_roadmap                                      |
-| `human_needed` | Present items to user, get approval or feedback                 |
-| `gaps_found`   | Present gap summary, offer `/harness:plan-phase {phase} --gaps` |
-
-**If passed:**
-
-Phase goal verified. Proceed to update_roadmap.
-
-**If human_needed:**
+**Report execution complete:**
 
 ```markdown
-## ✓ Phase {X}: {Name} — Human Verification Required
+## ✓ Phase {X}: {Name} — Execution Complete
 
-All automated checks passed. {N} items need human testing:
+All {N} plans executed across {M} waves.
 
-### Human Verification Checklist
+**Summary**
+{Brief description of what was built}
 
-{Extract from VERIFICATION.md human_verification section}
+**Commits**
+{List of commit hashes from plan SUMMARYs}
 
----
-
-**After testing:**
-
-- "approved" → continue to update_roadmap
-- Report issues → will route to gap closure planning
+**Next:** Orchestrator will spawn verification in a separate slot.
 ```
 
-If user approves → continue to update_roadmap.
-If user reports issues → treat as gaps_found.
-
-**If gaps_found:**
-
-Present gaps and offer next command:
-
-```markdown
-## ⚠ Phase {X}: {Name} — Gaps Found
-
-**Score:** {N}/{M} must-haves verified
-**Report:** {phase_dir}/{phase}-VERIFICATION.md
-
-### What's Missing
-
-{Extract gap summaries from VERIFICATION.md gaps section}
-
----
-
-## ▶ Next Up
-
-**Plan gap closure** — create additional plans to complete the phase
-
-`/harness:plan-phase {X} --gaps`
-
-<sub>`/clear` first → fresh context window</sub>
-
----
-
-**Also available:**
-
-- `cat {phase_dir}/{phase}-VERIFICATION.md` — see full report
-- `/harness:verify-work {X}` — manual testing before planning
-```
-
-User runs `/harness:plan-phase {X} --gaps` which:
-
-1. Reads VERIFICATION.md gaps
-2. Creates additional plans (04, 05, etc.) to close gaps
-3. User then runs `/harness:execute-phase {X}` again
-4. Execute-phase runs incomplete plans (04-05)
-5. Verifier runs again after new plans complete
-
-User stays in control at each decision point.
+**Do NOT spawn verifier internally.** The orchestrator handles verification scheduling.
 </step>
 
 <step name="update_roadmap">
@@ -465,11 +439,10 @@ Update ROADMAP.md to reflect phase completion:
 # Update status
 ```
 
-Commit phase completion (roadmap, state, verification):
+Commit phase completion (roadmap, state):
 
 ```bash
-git add .planning/ROADMAP.md .planning/STATE.md .planning/phases/{phase_dir}/*-VERIFICATION.md
-git add .planning/REQUIREMENTS.md  # if updated
+git add "$ROADMAP_FILE" "$STATE_FILE"
 git commit -m "docs(phase-{X}): complete phase execution"
 ```
 

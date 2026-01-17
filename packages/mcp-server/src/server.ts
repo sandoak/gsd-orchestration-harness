@@ -10,6 +10,7 @@ import { registerGetStateTool } from './tools/get-state.js';
 import { registerListSessionsTool } from './tools/list-sessions.js';
 import { registerRespondCheckpointTool } from './tools/respond-checkpoint.js';
 import { registerRespondTool } from './tools/respond.js';
+import { registerSignalCheckpointTool } from './tools/signal-checkpoint.js';
 import { registerStartSessionTool } from './tools/start-session.js';
 import { registerWaitForStateChangeTool } from './tools/wait-for-state-change.js';
 import { registerWorkerAwaitTool } from './tools/worker-await.js';
@@ -69,6 +70,9 @@ export class HarnessMcpServer {
 
     // Efficient monitoring tool (reduces polling context burn)
     registerWaitForStateChangeTool(this.server, this.manager);
+
+    // Explicit checkpoint signaling (direct orchestrator notification)
+    registerSignalCheckpointTool(this.server, this.manager);
 
     // Phase 1: Worker message protocol tools
     // Worker-side tools (used by Claude workers)

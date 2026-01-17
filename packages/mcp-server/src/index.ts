@@ -24,6 +24,7 @@ export { registerMarkPhaseVerifiedTool } from './tools/mark-phase-verified.js';
 export { registerRespondCheckpointTool } from './tools/respond-checkpoint.js';
 export { registerRespondTool } from './tools/respond.js';
 export { registerSetExecutionStateTool } from './tools/set-execution-state.js';
+export { registerSignalCheckpointTool } from './tools/signal-checkpoint.js';
 export { registerStartSessionTool } from './tools/start-session.js';
 export { registerSyncProjectStateTool } from './tools/sync-project-state.js';
 export { registerWaitForStateChangeTool } from './tools/wait-for-state-change.js';

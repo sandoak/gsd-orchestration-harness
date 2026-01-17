@@ -22,12 +22,16 @@ export {
   OutputStore,
   OrchestrationStore,
   MessageStore,
+  CheckpointStore,
   type SessionUpdateFields,
   type OrchestrationState,
   type PhasePlan,
   type PlanStatus,
   type WorkerMessageCreateInput,
   type OrchestratorMessageCreateInput,
+  type CheckpointRecord,
+  type CheckpointStatus,
+  type CreateCheckpointInput,
 } from './db/index.js';
 
 // Re-export relevant types from @gsd/core

@@ -36,7 +36,21 @@ type CheckpointResponse =
   | (CheckpointInfo & { hasCheckpoint: true; rawContent?: string });
 
 /**
- * Detects checkpoint type from output using CHECKPOINT_PATTERNS.
+ * Completion detection patterns for workflow completion.
+ */
+const COMPLETION_PATTERNS = {
+  verificationPassed: /verification\s+passed/i,
+  planningComplete: /planning\s+complete/i,
+  phaseComplete: /phase\s+\d+.*complete/i,
+  executionComplete: /execution\s+complete/i,
+  nextCommand: /next\s+command:\s*(.+?)(?:\n|$)/i,
+  // Orchestrator signal patterns
+  spawnVerification: /orchestrator\s+will\s+spawn\s+verification/i,
+  awaitingVerification: /awaiting\s+verification/i,
+};
+
+/**
+ * Detects checkpoint type from output using CHECKPOINT_PATTERNS and completion patterns.
  */
 function detectCheckpointType(output: string): CheckpointType | undefined {
   if (CHECKPOINT_PATTERNS.humanVerify.test(output)) {
@@ -48,7 +62,73 @@ function detectCheckpointType(output: string): CheckpointType | undefined {
   if (CHECKPOINT_PATTERNS.humanAction.test(output)) {
     return 'human-action';
   }
+  // Check for completion patterns (workflow finished)
+  if (
+    COMPLETION_PATTERNS.verificationPassed.test(output) ||
+    COMPLETION_PATTERNS.planningComplete.test(output) ||
+    COMPLETION_PATTERNS.phaseComplete.test(output) ||
+    COMPLETION_PATTERNS.executionComplete.test(output) ||
+    COMPLETION_PATTERNS.nextCommand.test(output) ||
+    COMPLETION_PATTERNS.spawnVerification.test(output) ||
+    COMPLETION_PATTERNS.awaitingVerification.test(output)
+  ) {
+    return 'completion';
+  }
   return undefined;
+}
+
+/**
+ * Parses completion checkpoint from output.
+ */
+function parseCompletionCheckpoint(
+  output: string,
+  _sessionId: string
+): {
+  workflow: string;
+  status: 'success' | 'partial' | 'failed';
+  summary: string;
+  nextCommand?: string;
+} {
+  // Extract next command if present
+  const nextCommandMatch = output.match(COMPLETION_PATTERNS.nextCommand);
+  const nextCommand = nextCommandMatch?.[1]?.trim();
+
+  // Determine workflow type from output
+  let workflow = 'unknown';
+  if (/plan-phase|planning/i.test(output)) {
+    workflow = 'plan-phase';
+  } else if (/execute-phase|execution/i.test(output)) {
+    workflow = 'execute-phase';
+  } else if (/verify-work|verification/i.test(output)) {
+    workflow = 'verify-work';
+  } else if (/research-phase|research/i.test(output)) {
+    workflow = 'research-phase';
+  }
+
+  // Determine status
+  let status: 'success' | 'partial' | 'failed' = 'success';
+  if (/failed|error|blocked/i.test(output)) {
+    status = 'failed';
+  } else if (/partial|incomplete/i.test(output)) {
+    status = 'partial';
+  }
+
+  // Extract summary (look for status message patterns)
+  let summary = 'Workflow completed';
+  if (COMPLETION_PATTERNS.verificationPassed.test(output)) {
+    summary = 'Verification passed';
+  } else if (COMPLETION_PATTERNS.planningComplete.test(output)) {
+    summary = 'Planning complete';
+  } else if (COMPLETION_PATTERNS.executionComplete.test(output)) {
+    summary = 'Execution complete - awaiting verification';
+  } else if (COMPLETION_PATTERNS.spawnVerification.test(output)) {
+    summary = 'Execution complete - orchestrator should spawn verification';
+  } else if (COMPLETION_PATTERNS.phaseComplete.test(output)) {
+    const match = output.match(/phase\s+(\d+).*complete/i);
+    summary = match ? `Phase ${match[1]} complete` : 'Phase complete';
+  }
+
+  return { workflow, status, summary, nextCommand };
 }
 
 /**
@@ -106,7 +186,60 @@ export function registerGetCheckpointTool(
       };
     }
 
-    // Check session status first
+    // PRIORITY 1: Check for explicit checkpoint in database (from harness_signal_checkpoint)
+    const dbCheckpoint = manager.checkpointStore.getPendingBySession(sessionId);
+    if (dbCheckpoint) {
+      // Return the explicit checkpoint - this takes priority over pattern detection
+      const response: CheckpointResponse = {
+        hasCheckpoint: true,
+        type: dbCheckpoint.type === 'error' ? undefined : dbCheckpoint.type,
+        sessionId,
+        detectedAt: dbCheckpoint.createdAt,
+        ...(dbCheckpoint.type === 'completion' && {
+          workflow: dbCheckpoint.workflow ?? 'unknown',
+          status: 'success' as const,
+          summary: dbCheckpoint.summary,
+          nextCommand: dbCheckpoint.nextCommand,
+          resumeSignal: dbCheckpoint.nextCommand
+            ? `Run: ${dbCheckpoint.nextCommand}`
+            : 'Workflow completed - decide next action',
+        }),
+        ...(dbCheckpoint.type === 'human-verify' && {
+          whatBuilt: dbCheckpoint.summary,
+          howToVerify: ['See checkpoint details'],
+          resumeSignal: 'Type "approved" to continue',
+        }),
+        ...(dbCheckpoint.type === 'decision' && {
+          decision: dbCheckpoint.summary,
+          context: '',
+          options: [],
+          resumeSignal: 'Select an option',
+        }),
+        ...(dbCheckpoint.type === 'human-action' && {
+          action: dbCheckpoint.summary,
+          instructions: '',
+          resumeSignal: 'Type "done" when complete',
+        }),
+        rawContent: JSON.stringify(dbCheckpoint.data ?? {}),
+      } as CheckpointResponse;
+
+      return {
+        content: [
+          {
+            type: 'text',
+            text: JSON.stringify({
+              success: true,
+              sessionId,
+              checkpoint: response,
+              source: 'explicit', // Indicates this came from harness_signal_checkpoint
+              checkpointId: dbCheckpoint.id,
+            }),
+          },
+        ],
+      };
+    }
+
+    // PRIORITY 2: Check session status for pattern-based detection
     if (session.status !== 'waiting_checkpoint') {
       const response: CheckpointResponse = { hasCheckpoint: false };
       return {
@@ -123,6 +256,7 @@ export function registerGetCheckpointTool(
       };
     }
 
+    // PRIORITY 3: Fall back to pattern-based detection from output
     try {
       // Get recent output (last chunks, roughly 50 lines worth)
       const outputChunks = manager.getOutput(sessionId);
@@ -164,45 +298,64 @@ export function registerGetCheckpointTool(
         };
       }
 
-      // Parse the checkpoint content
-      const parsedCheckpoint = rawContent
-        ? CheckpointParser.parse(rawContent, checkpointType, sessionId)
-        : undefined;
-
-      // Build response with parsed checkpoint or fallback to raw content
+      // Handle completion checkpoint specially (not parsed by CheckpointParser)
       let response: CheckpointResponse;
-      if (parsedCheckpoint) {
-        response = {
-          ...parsedCheckpoint,
-          hasCheckpoint: true,
-          rawContent, // Include raw content as fallback
-        };
-      } else {
-        // Parsing failed, return raw content with detected type
+      if (checkpointType === 'completion') {
+        const completionData = parseCompletionCheckpoint(fullOutput, sessionId);
         response = {
           hasCheckpoint: true,
-          type: checkpointType,
+          type: 'completion',
           sessionId,
           detectedAt: new Date(),
-          rawContent: rawContent ?? 'Checkpoint content not extracted',
-          // Type-specific fallbacks based on checkpoint type
-          ...(checkpointType === 'human-verify' && {
-            whatBuilt: 'Unable to parse',
-            howToVerify: ['Unable to parse verification steps'],
-            resumeSignal: 'Type "approved" to continue',
-          }),
-          ...(checkpointType === 'decision' && {
-            decision: 'Unable to parse',
-            context: '',
-            options: [{ id: 'unknown', name: 'Unable to parse', pros: '', cons: '' }],
-            resumeSignal: 'Select an option',
-          }),
-          ...(checkpointType === 'human-action' && {
-            action: 'Unable to parse',
-            instructions: rawContent ?? '',
-            resumeSignal: 'Type "done" when complete',
-          }),
+          workflow: completionData.workflow,
+          status: completionData.status,
+          summary: completionData.summary,
+          nextCommand: completionData.nextCommand,
+          resumeSignal: completionData.nextCommand
+            ? `Run: ${completionData.nextCommand}`
+            : 'Workflow completed - decide next action',
+          rawContent: rawContent ?? recentOutput.slice(-500),
         } as CheckpointResponse;
+      } else {
+        // Parse the checkpoint content using CheckpointParser
+        const parsedCheckpoint = rawContent
+          ? CheckpointParser.parse(rawContent, checkpointType, sessionId)
+          : undefined;
+
+        // Build response with parsed checkpoint or fallback to raw content
+        if (parsedCheckpoint) {
+          response = {
+            ...parsedCheckpoint,
+            hasCheckpoint: true,
+            rawContent, // Include raw content as fallback
+          };
+        } else {
+          // Parsing failed, return raw content with detected type
+          response = {
+            hasCheckpoint: true,
+            type: checkpointType,
+            sessionId,
+            detectedAt: new Date(),
+            rawContent: rawContent ?? 'Checkpoint content not extracted',
+            // Type-specific fallbacks based on checkpoint type
+            ...(checkpointType === 'human-verify' && {
+              whatBuilt: 'Unable to parse',
+              howToVerify: ['Unable to parse verification steps'],
+              resumeSignal: 'Type "approved" to continue',
+            }),
+            ...(checkpointType === 'decision' && {
+              decision: 'Unable to parse',
+              context: '',
+              options: [{ id: 'unknown', name: 'Unable to parse', pros: '', cons: '' }],
+              resumeSignal: 'Select an option',
+            }),
+            ...(checkpointType === 'human-action' && {
+              action: 'Unable to parse',
+              instructions: rawContent ?? '',
+              resumeSignal: 'Type "done" when complete',
+            }),
+          } as CheckpointResponse;
+        }
       }
 
       return {

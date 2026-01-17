@@ -13,6 +13,7 @@ import type {
   PromptIntent,
 } from '@gsd/core';
 
+import { CheckpointStore } from './db/checkpoint-store.js';
 import { DatabaseConnection } from './db/database.js';
 import { MessageStore } from './db/message-store.js';
 import { OrchestrationStore } from './db/orchestration-store.js';
@@ -86,6 +87,7 @@ export class PersistentSessionManager extends EventEmitter<PersistentSessionMana
   private outputStore: OutputStore;
   private _orchestrationStore: OrchestrationStore;
   private _messageStore: MessageStore;
+  private _checkpointStore: CheckpointStore;
   private sessionManager: SessionManager;
   private timeoutChecker: ReturnType<typeof setInterval> | null = null;
   private sessionTimeout: number;
@@ -102,6 +104,7 @@ export class PersistentSessionManager extends EventEmitter<PersistentSessionMana
     this.outputStore = new OutputStore(this.dbConnection.db);
     this._orchestrationStore = new OrchestrationStore(this.dbConnection.db);
     this._messageStore = new MessageStore(this.dbConnection.db);
+    this._checkpointStore = new CheckpointStore(this.dbConnection.db);
 
     // Initialize inner session manager
     this.sessionManager = new SessionManager({
@@ -303,6 +306,17 @@ export class PersistentSessionManager extends EventEmitter<PersistentSessionMana
   }
 
   /**
+   * Updates the status of a session.
+   * Used by MCP tools to mark sessions as waiting_checkpoint, etc.
+   *
+   * @param sessionId - ID of the session to update
+   * @param status - New status to set
+   */
+  updateSessionStatus(sessionId: string, status: Session['status']): void {
+    this.sessionStore.update(sessionId, { status });
+  }
+
+  /**
    * Lists all sessions, merging live sessions with completed sessions from the database.
    * Live sessions are returned with their current state.
    *
@@ -369,6 +383,13 @@ export class PersistentSessionManager extends EventEmitter<PersistentSessionMana
    */
   get messageStore(): MessageStore {
     return this._messageStore;
+  }
+
+  /**
+   * Gets the checkpoint store for explicit checkpoint signaling.
+   */
+  get checkpointStore(): CheckpointStore {
+    return this._checkpointStore;
   }
 
   /**

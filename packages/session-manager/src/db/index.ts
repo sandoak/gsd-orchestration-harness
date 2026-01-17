@@ -13,3 +13,9 @@ export {
   type WorkerMessageCreateInput,
   type OrchestratorMessageCreateInput,
 } from './message-store.js';
+export {
+  CheckpointStore,
+  type CheckpointRecord,
+  type CheckpointStatus,
+  type CreateCheckpointInput,
+} from './checkpoint-store.js';
