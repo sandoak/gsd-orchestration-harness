@@ -35,7 +35,7 @@ If spec looks complete (STATUS.md says complete, UAT passed):
 ls -la $SPEC_DIR/AUDIT.md 2>/dev/null || echo "MISSING"
 ```
 
-If AUDIT.md missing → Run `/harness:audit-milestone` FIRST. Never skip this.
+If AUDIT.md missing → Run `/harness:audit-spec` FIRST. Never skip this.
 </on_context_compaction>
 
 <global_resources>
@@ -100,14 +100,14 @@ ls -la $SPEC_DIR/AUDIT.md 2>/dev/null || echo "NO AUDIT - CANNOT DECLARE COMPLET
 ❌ WRONG: STATUS.md says "complete" → "The spec is complete!"
 ❌ WRONG: All UAT passed → "No further work needed!"
 ❌ WRONG: "Would you like me to: 1. Push 2. Create PR 3. ..."
-✅ RIGHT: Check AUDIT.md exists → If missing, run /harness:audit-milestone → THEN report
+✅ RIGHT: Check AUDIT.md exists → If missing, run /harness:audit-spec → THEN report
 ```
 
 **If AUDIT.md is MISSING:**
 
 1. DO NOT declare the spec complete
 2. DO NOT offer options to the user
-3. IMMEDIATELY run: `harness_start_session(workingDir, "/harness:audit-milestone")`
+3. IMMEDIATELY run: `harness_start_session(workingDir, "/harness:audit-spec")`
 4. Wait for audit to complete
 5. ONLY THEN can spec be considered complete
 
@@ -251,12 +251,12 @@ Check this directory for database credentials, API keys, and server connection i
 ```
 ❌ WRONG: All phases verified → "Spec is complete!" → Close session
 ❌ WRONG: "All tests passed, marking spec as done"
-✅ RIGHT: All phases verified → /harness:audit-milestone → Handle gaps → THEN complete
+✅ RIGHT: All phases verified → /harness:audit-spec → Handle gaps → THEN complete
 ```
 
 **After the LAST phase verifies successfully, you MUST:**
 
-1. **RUN AUDIT**: `harness_start_session(workingDir, "/harness:audit-milestone")`
+1. **RUN AUDIT**: `harness_start_session(workingDir, "/harness:audit-spec")`
 2. **Compare** what was built against original PROJECT.md/REQUIREMENTS.md
 3. **If GAPS_FOUND**: Create remediation phases, execute them, verify, audit again
 4. **If ADHERENCE_100%**: ONLY THEN declare spec complete
@@ -530,7 +530,7 @@ Before orchestrating, ensure context:
 - The spec is NOT complete, regardless of what STATUS.md says
 - Do NOT say "the spec is complete"
 - Do NOT offer options to the user
-- IMMEDIATELY run: `harness_start_session(workingDir, "/harness:audit-milestone")`
+- IMMEDIATELY run: `harness_start_session(workingDir, "/harness:audit-spec")`
 
 **If `canStopOrchestration: true`:**
 
@@ -670,13 +670,13 @@ ls -la $SPEC_DIR/AUDIT.md 2>/dev/null && echo "AUDIT EXISTS" || echo "NO AUDIT"
 STATUS.md "complete" ≠ Actually complete
 AUDIT.md with 100% adherence = Actually complete
 
-Running /harness:audit-milestone now...
+Running /harness:audit-spec now...
 ```
 
 **IMMEDIATELY start audit session:**
 
 ```
-harness_start_session(workingDir, "/harness:audit-milestone")
+harness_start_session(workingDir, "/harness:audit-spec")
 ```
 
 **DO NOT declare spec complete, offer options, or stop orchestration until AUDIT.md exists!**
@@ -718,7 +718,7 @@ ls -la $SPEC_DIR/AUDIT.md 2>/dev/null || echo "NO AUDIT FOUND"
 ╠══════════════════════════════════════════════════════════════════════╣
 ║                                                                        ║
 ║  STATUS.md says "complete" but AUDIT.md is missing.                   ║
-║  Starting /harness:audit-milestone to compare against requirements.   ║
+║  Starting /harness:audit-spec to compare against requirements.   ║
 ║                                                                        ║
 ╚══════════════════════════════════════════════════════════════════════╝
 ```
@@ -726,7 +726,7 @@ ls -la $SPEC_DIR/AUDIT.md 2>/dev/null || echo "NO AUDIT FOUND"
 **IMMEDIATELY start audit session (no user prompt!):**
 
 ```
-harness_start_session(workingDir, "/harness:audit-milestone")
+harness_start_session(workingDir, "/harness:audit-spec")
 ```
 
 **Do NOT ask the user "would you like me to run audit?" - JUST RUN IT!**
@@ -1267,7 +1267,7 @@ One tool call replaces dozens of polling calls. Much more efficient!
        ```
 
        **If AUDIT.md is MISSING:**
-       - **IMMEDIATELY start audit**: `harness_start_session(workingDir, "/harness:audit-milestone")`
+       - **IMMEDIATELY start audit**: `harness_start_session(workingDir, "/harness:audit-spec")`
        - DO NOT declare spec complete!
        - DO NOT offer options to the user!
        - DO NOT stop orchestration!
@@ -1826,7 +1826,7 @@ When all planned phases are complete:
 **Trigger the audit:**
 
 ```
-harness_start_session(workingDir, "/harness:audit-milestone")
+harness_start_session(workingDir, "/harness:audit-spec")
 ```
 
 **Handle audit results:**

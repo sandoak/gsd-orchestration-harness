@@ -6,7 +6,7 @@ This is the quality gate that ensures what was built matches what was planned.
 
 <trigger>
 Use this workflow when:
-- User invokes `/harness:audit-milestone`
+- User invokes `/harness:audit-spec`
 - All phases in a milestone have been executed and verified
 - Orchestrator completes all planned phases
 - User wants to verify spec compliance before shipping
@@ -15,9 +15,9 @@ Use this workflow when:
 <arguments>
 **Usage:**
 ```
-/harness:audit-milestone                    # Audit current milestone
-/harness:audit-milestone [spec-path]        # Audit specific spec
-/harness:audit-milestone --max-iterations=3 # Limit remediation loops
+/harness:audit-spec                    # Audit current milestone
+/harness:audit-spec [spec-path]        # Audit specific spec
+/harness:audit-spec --max-iterations=3 # Limit remediation loops
 ```
 
 **$ARGUMENTS parsing:**
@@ -374,7 +374,7 @@ Next command: /harness:orchestrate (will pick up new phases)
 **If 100%:**
 
 ```
-✅ All requirements satisfied. Ready for /harness:complete-milestone
+✅ All requirements satisfied. Spec is complete.
 ```
 
 **If <100% and max_iterations reached:**
@@ -399,13 +399,13 @@ After all phases complete and verify:
 ```
 1. All phases executed ✓
 2. All phases verified ✓
-3. Run /harness:audit-milestone
+3. Run /harness:audit-spec
 4. If GAPS_FOUND:
    - New phases were auto-created in ROADMAP.md
    - Continue orchestration (will pick up new phases)
    - After new phases complete, audit again
 5. If ADHERENCE_100%:
-   - Proceed to /harness:complete-milestone
+   - Spec is complete, orchestration can stop
 6. If MAX_ITERATIONS:
    - Alert user, require manual decision
 ```

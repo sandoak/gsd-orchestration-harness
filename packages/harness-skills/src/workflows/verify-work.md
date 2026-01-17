@@ -800,10 +800,10 @@ All tests passed. Phase {phase} verification COMPLETE.
 
 Verification confirms the phase WORKS. Audit confirms the SPEC MEETS REQUIREMENTS.
 
-- `/harness:audit-milestone` — Compare deliverables against requirements (REQUIRED)
+- `/harness:audit-spec` — Compare deliverables against requirements (REQUIRED)
 ```
 
-**nextCommand for checkpoint:** `/harness:audit-milestone`
+**nextCommand for checkpoint:** `/harness:audit-spec`
 
 **If more phases remain (phase < LAST_PHASE):**
 

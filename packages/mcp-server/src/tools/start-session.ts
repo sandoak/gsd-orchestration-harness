@@ -15,7 +15,7 @@ const startSessionSchema = {
  */
 function isExecuteCommand(command: string | undefined): boolean {
   if (!command) return false;
-  return command.includes('/gsd:execute-plan') || command.includes('gsd:execute-plan');
+  return command.includes('/harness:execute-plan') || command.includes('harness:execute-plan');
 }
 
 /**
@@ -23,7 +23,7 @@ function isExecuteCommand(command: string | undefined): boolean {
  */
 function isPlanCommand(command: string | undefined): boolean {
   if (!command) return false;
-  return command.includes('/gsd:plan-phase') || command.includes('gsd:plan-phase');
+  return command.includes('/harness:plan-phase') || command.includes('harness:plan-phase');
 }
 
 /**
@@ -31,28 +31,28 @@ function isPlanCommand(command: string | undefined): boolean {
  */
 function isVerifyCommand(command: string | undefined): boolean {
   if (!command) return false;
-  return command.includes('/gsd:verify-work') || command.includes('gsd:verify-work');
+  return command.includes('/harness:verify-work') || command.includes('harness:verify-work');
 }
 
 /**
  * Extract phase number from a command.
- * - Plan: "/gsd:plan-phase 3" → 3
- * - Execute: "/gsd:execute-plan .planning/phases/02-xxx/02-01-PLAN.md" → 2
- * - Verify: "/gsd:verify-work 2" → 2 (if specified)
+ * - Plan: "/harness:plan-phase 3" → 3
+ * - Execute: "/harness:execute-plan .planning/phases/02-xxx/02-01-PLAN.md" → 2
+ * - Verify: "/harness:verify-work 2" → 2 (if specified)
  */
 function extractPhaseNumber(command: string | undefined): number | null {
   if (!command) return null;
 
-  // Plan command: /gsd:plan-phase X
-  const planMatch = command.match(/gsd:plan-phase\s+(\d+)/i);
+  // Plan command: /harness:plan-phase X
+  const planMatch = command.match(/harness:plan-phase\s+(\d+)/i);
   if (planMatch && planMatch[1]) return parseInt(planMatch[1], 10);
 
   // Execute command: .planning/phases/XX-xxx/ (first two digits are phase)
   const execMatch = command.match(/phases\/(\d{2})-/);
   if (execMatch && execMatch[1]) return parseInt(execMatch[1], 10);
 
-  // Verify command: /gsd:verify-work X (optional phase number)
-  const verifyMatch = command.match(/gsd:verify-work\s+(\d+)/i);
+  // Verify command: /harness:verify-work X (optional phase number)
+  const verifyMatch = command.match(/harness:verify-work\s+(\d+)/i);
   if (verifyMatch && verifyMatch[1]) return parseInt(verifyMatch[1], 10);
 
   return null;
@@ -63,7 +63,7 @@ function extractPhaseNumber(command: string | undefined): number | null {
  */
 function extractPlanPath(command: string | undefined): string | null {
   if (!command) return null;
-  const match = command.match(/gsd:execute-plan\s+(\S+)/i);
+  const match = command.match(/harness:execute-plan\s+(\S+)/i);
   return match && match[1] ? match[1] : null;
 }
 
@@ -196,7 +196,7 @@ export function registerStartSessionTool(
 
       if (planPhase !== null) {
         // Check planning limit from database (plan-level, not phase-level)
-        // For /gsd:plan-phase X, we check if planning any plan in Phase X is allowed
+        // For /harness:plan-phase X, we check if planning any plan in Phase X is allowed
         const planCheck = orchestrationStore.canStartPlan(workingDir, planPhase);
         if (!planCheck.allowed) {
           console.log(`[mcp] BLOCKED: Planning limit - ${planCheck.reason}`);

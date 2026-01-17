@@ -382,7 +382,7 @@ async function checkAuditStatus(specDir: string): Promise<AuditStatus> {
         auditExists: true,
         auditPassed: false,
         canDeclareComplete: false,
-        auditMessage: `AUDIT.md status: gaps_found (${adherencePercent}% adherence). Run /harness:audit-milestone to remediate gaps.`,
+        auditMessage: `AUDIT.md status: gaps_found (${adherencePercent}% adherence). Run /harness:audit-spec to remediate gaps.`,
       };
     } else if (status === 'in_progress') {
       return {
@@ -397,7 +397,7 @@ async function checkAuditStatus(specDir: string): Promise<AuditStatus> {
         auditExists: true,
         auditPassed: false,
         canDeclareComplete: false,
-        auditMessage: `AUDIT.md status: pending. Run /harness:audit-milestone to verify spec against requirements.`,
+        auditMessage: `AUDIT.md status: pending. Run /harness:audit-spec to verify spec against requirements.`,
       };
     }
   } catch {
@@ -406,7 +406,7 @@ async function checkAuditStatus(specDir: string): Promise<AuditStatus> {
       auditPassed: false,
       canDeclareComplete: false,
       auditMessage:
-        '⚠️ AUDIT.md MISSING - Cannot declare spec complete! Run /harness:audit-milestone FIRST.',
+        '⚠️ AUDIT.md MISSING - Cannot declare spec complete! Run /harness:audit-spec FIRST.',
     };
   }
 }
@@ -887,7 +887,7 @@ export function registerSyncProjectStateTool(
       // Generate a prominent warning if audit is missing but work looks complete
       const auditWarning =
         workLooksComplete && !auditStatus.canDeclareComplete
-          ? `\n\n⚠️⚠️⚠️ STOP! AUDIT.md MISSING! ⚠️⚠️⚠️\n\n${auditStatus.auditMessage}\n\nYou CANNOT declare this spec complete.\nYou MUST run: harness_start_session(workingDir, "/harness:audit-milestone")\n\n⚠️⚠️⚠️ DO NOT IGNORE THIS ⚠️⚠️⚠️\n\n`
+          ? `\n\n⚠️⚠️⚠️ STOP! AUDIT.md MISSING! ⚠️⚠️⚠️\n\n${auditStatus.auditMessage}\n\nYou CANNOT declare this spec complete.\nYou MUST run: harness_start_session(workingDir, "/harness:audit-spec")\n\n⚠️⚠️⚠️ DO NOT IGNORE THIS ⚠️⚠️⚠️\n\n`
           : '';
 
       return {
@@ -909,7 +909,7 @@ export function registerSyncProjectStateTool(
                   message: auditStatus.auditMessage,
                   action: auditStatus.canDeclareComplete
                     ? 'AUDIT passed - spec can be declared complete'
-                    : 'MUST RUN: harness_start_session(workingDir, "/harness:audit-milestone")',
+                    : 'MUST RUN: harness_start_session(workingDir, "/harness:audit-spec")',
                 },
                 sync: {
                   totalPlans: discoveredPlans.length,
